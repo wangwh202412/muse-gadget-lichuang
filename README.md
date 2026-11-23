@@ -12,6 +12,12 @@ copyright notices (see LICENSE).
 
 把 Meta 的 [muse-gadget-sdk](https://github.com/facebookincubator/muse-gadget-sdk)（ESP32 Device SDK，Apache-2.0）移植到**立创·实战派 ESP32-S3** 开发板（小智板名 `lichuang-dev`，board id `lichuang_dev`），并为语音留言回复接上火山豆包 TTS 朗读。本仓库是个人移植项目，与 Meta 无隶属或背书关系；英文说明见 [README-lichuang.md](README-lichuang.md)。
 
+<p align="center">
+  <img src="docs/images/lichuang-dev-1.png" width="430" alt="立创·实战派 ESP32-S3 开发板">
+  <img src="docs/images/lichuang-dev-2.png" width="300" alt="立创·实战派 ESP32-S3 开发板（无线连接示意）">
+</p>
+<p align="center"><sub>立创·实战派 ESP32-S3 开发板产品图</sub></p>
+
 ## 板子
 
 ESP32-S3R8（16 MB flash，8 MB octal PSRAM），320×240 ST7789 LCD（片选在 PCA9557 扩展器上，背光 GPIO42 反相），FT6336 触摸，ES8311 播放 codec + ES7210 双麦，GC0308 摄像头（本树未接入，见下方状态）。
