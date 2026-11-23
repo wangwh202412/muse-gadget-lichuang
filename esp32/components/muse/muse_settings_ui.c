@@ -42,6 +42,9 @@
 #include "muse_keypad.h"
 #include "muse_link.h"
 #include "muse_settings.h"
+#if CONFIG_MUSE_HOME_PAGE
+#include "muse_home.h"
+#endif
 #if CONFIG_MUSE_AVATAR_SYNC
 #include "muse_avatar.h"
 #endif
@@ -157,6 +160,12 @@ static const char *const SLEEP_NAMES[] = { "Never", "30 seconds", "1 minute", "2
 #define SLEEP_COUNT (int)(sizeof(SLEEP_CHOICES) / sizeof(SLEEP_CHOICES[0]))
 static lv_obj_t *s_sleep_checks[SLEEP_COUNT], *s_sleep_rows[SLEEP_COUNT];
 static int s_sleep_shown = -1;
+
+/* City page (home page weather). */
+#if CONFIG_MUSE_HOME_PAGE
+static lv_obj_t *s_city, *s_home_city;
+static lv_obj_t *s_city_checks[MUSE_HOME_CITY_MAX], *s_city_rows[MUSE_HOME_CITY_MAX];
+#endif
 
 /* Battery page. */
 static lv_obj_t *s_batt_status, *s_batt_level, *s_batt_drain, *s_batt_full, *s_batt_off, *s_batt_slept, *s_batt_wakes,
@@ -554,6 +563,9 @@ static lv_obj_t *info_row(lv_obj_t *list, const char *text)
 static void drop(lv_obj_t *p)
 {
     lv_obj_t **const pages[] = { &s_wifi, &s_hatch, &s_ble, &s_sound, &s_sleep, &s_battery, &s_power, &s_text, &s_proxy,
+#if CONFIG_MUSE_HOME_PAGE
+        &s_city,
+#endif
 #if CONFIG_MUSE_UI_THEME
         &s_appearance,
 #endif
@@ -1634,6 +1646,40 @@ static void tick_sleep(void)
     s_sleep_shown = cur;
 }
 
+/* ---------- City ---------- */
+#if CONFIG_MUSE_HOME_PAGE
+
+static void tick_city(void);
+
+static void on_city_choice(lv_event_t *e)
+{
+    muse_home_set_city((int)(intptr_t)lv_event_get_user_data(e));
+    tick_city();
+}
+
+static void build_city_page(lv_obj_t *tile)
+{
+    lv_obj_t *list;
+    s_city = page(tile, "CITY", true, &list);
+    note(list, "Weather on the home page is for:");
+    int n = muse_home_city_count();
+    for (int i = 0; i < n; i++) {
+        s_city_rows[i] = row(list, NULL, muse_home_city_name_en(i), &s_city_checks[i], on_city_choice,
+                             (void *)(intptr_t)i);
+        muse_theme_set_style_text_color(s_city_checks[i], lv_color_hex(COLOR_ACCENT), 0);
+    }
+}
+
+static void tick_city(void)
+{
+    int cur = muse_home_city_index();
+    int n = muse_home_city_count();
+    for (int i = 0; i < n; i++) {
+        set_text(s_city_checks[i], i == cur ? LV_SYMBOL_OK : "");
+    }
+}
+#endif
+
 /* ---------- Battery ---------- */
 
 static void on_battery_reset(lv_event_t *e)
@@ -1832,6 +1878,9 @@ static const page_t HATCH = { &s_hatch, build_hatch_page };
 static const page_t BLE = { &s_ble, build_ble_page };
 static const page_t SOUND = { &s_sound, build_sound_page };
 static const page_t SLEEP = { &s_sleep, build_sleep_page };
+#if CONFIG_MUSE_HOME_PAGE
+static const page_t CITY = { &s_city, build_city_page };
+#endif
 static const page_t BATTERY = { &s_battery, build_battery_page };
 static const page_t POWER = { &s_power, build_power_page };
 
@@ -1883,6 +1932,9 @@ static void build_home(lv_obj_t *tile)
         row(list, LV_SYMBOL_VOLUME_MAX, "Sound", &s_home_sound, on_nav, (void *)&SOUND);
     }
     row(list, LV_SYMBOL_EYE_CLOSE, "Sleep", &s_home_sleep, on_nav, (void *)&SLEEP);
+#if CONFIG_MUSE_HOME_PAGE
+    row(list, LV_SYMBOL_LIST, "City", &s_home_city, on_nav, (void *)&CITY);
+#endif
     row(list, LV_SYMBOL_BATTERY_FULL, "Battery", &s_home_battery, on_nav, (void *)&BATTERY);
 #if CONFIG_MUSE_VIDEO
     if (muse_video_supported()) {
@@ -1926,6 +1978,9 @@ static void tick_home(void)
         set_text(s_home_sound, "Muted");
     }
     set_text(s_home_sleep, sleep_name(muse_settings_sleep_s()));
+#if CONFIG_MUSE_HOME_PAGE
+    set_text(s_home_city, muse_home_city_name_en(muse_home_city_index()));
+#endif
 
     muse_power_t p = muse_state_power();
     char buf[96];
@@ -2075,6 +2130,10 @@ void muse_settings_ui_tick(bool visible)
         tick_sound();
     } else if (s_current == s_sleep) {
         tick_sleep();
+#if CONFIG_MUSE_HOME_PAGE
+    } else if (s_current == s_city) {
+        tick_city();
+#endif
     } else if (s_current == s_battery) {
         tick_battery();
     }

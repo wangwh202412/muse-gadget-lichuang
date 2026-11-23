@@ -53,9 +53,11 @@ CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y
 # CPU touches them, and Link and Muse's sessions need the internal RAM.
 CONFIG_MUSE_STATIC_BUFFERS_IN_PSRAM=y
 CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM=8
-# Sold to Chinese speakers: captions fall back to Unifont's CJK
-# (about 1.2 MB) instead of showing boxes.
+# Sold to Chinese speakers: captions fall back to a CJK font instead
+# of showing boxes. Noto Sans SC (anti-aliased, GB2312 coverage, about
+# 910 KB) rather than Unifont's 1-bit bitmaps (about 1.2 MB).
 CONFIG_MUSE_CJK_FONT=y
+CONFIG_MUSE_CJK_FONT_NOTO=y
 # Live voice calls with Muse (experimental): tap to call, Muse
 # answers out loud, no TTS key needed. Turn off in menuconfig if the
 # account's VM refuses calls; voice notes keep working either way.
@@ -65,3 +67,10 @@ CONFIG_MUSE_REALTIME_VOICE=y
 CONFIG_MUSE_TTS_VOLCANO_API_KEY=""
 CONFIG_MUSE_TTS_VOLCANO_RESOURCE_ID="seed-tts-2.0"
 CONFIG_MUSE_TTS_VOLCANO_SPEAKER="zh_female_xiaohe_uranus_bigtts"
+
+# Home page: idle tile with clock, date, Shanghai weather + air quality
+# (Open-Meteo, no key). Boot and idle land on it; sleep unchanged.
+CONFIG_MUSE_HOME_PAGE=y
+CONFIG_MUSE_HOME_CITY="上海"
+CONFIG_MUSE_HOME_LAT="31.2304"
+CONFIG_MUSE_HOME_LON="121.4737"

@@ -917,4 +917,37 @@ endif
         string "Volcano TTS speaker"
         default "zh_female_xiaohe_uranus_bigtts"
 
+    config MUSE_HOME_PAGE
+        bool "Home page: clock and weather as the idle tile"
+        default n
+        depends on !MUSE_LATEST_REPLY
+        help
+            Adds a tile left of the face with the time, the date and the
+            local weather (Open-Meteo, no key; air quality as US AQI).
+            It is the tile shown at boot and the one the UI drifts back
+            to after 45 s idle on the face. Time comes from SNTP
+            (pool.ntp.org) in the fixed CST-8 timezone. Touch boards
+            only (the tile lives in the swipe tileview).
+
+    config MUSE_HOME_CITY
+        string "Home page city label"
+        default "上海"
+        depends on MUSE_HOME_PAGE
+
+    config MUSE_HOME_LAT
+        string "Home page latitude"
+        default "31.2304"
+        depends on MUSE_HOME_PAGE
+
+    config MUSE_HOME_LON
+        string "Home page longitude"
+        default "121.4737"
+        depends on MUSE_HOME_PAGE
+
+    config MUSE_HOME_REFRESH_MIN
+        int "Home page weather refresh (minutes)"
+        default 30
+        range 5 240
+        depends on MUSE_HOME_PAGE
+
 endmenu

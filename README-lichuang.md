@@ -49,9 +49,14 @@ Muse account it is paired with.
 ## Status (2026-11-23)
 
 - Working: display, touch, voice notes with spoken replies (Volcano
-  seed-tts-2.0, speaker 小何2.0), settings, Wi-Fi provisioning via the app.
-- Realtime voice calls: the paired account's VM rejects gadget calls with
-  a licensing error; not fixable from the firmware side.
+  seed-tts-2.0, speaker 小何2.0), settings, Wi-Fi provisioning via the
+  app, realtime voice calls.
+- Home page (added 2026-11-23): the default boot/idle tile shows the
+  time and date plus Open-Meteo weather (current temperature, humidity,
+  high/low, 3-day forecast) and air quality (US AQI); the avatar tile
+  auto-slides back to it after 45 s idle. Chinese text uses Noto Sans SC.
+- The weather city is switchable in Settings → City (20 cities,
+  persisted in NVS); Shanghai is the default.
 - Photo notes (GC0308): a backend was written
   (`boards/lichuang_camera.c`, esp32-camera) and then parked on
   2026-11-23 before hardware verification; it is not in this tree.

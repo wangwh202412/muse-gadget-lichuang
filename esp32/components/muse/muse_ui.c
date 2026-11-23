@@ -45,6 +45,9 @@
 #include "muse_chat.h"
 #include "muse_console.h"
 #include "muse_lang.h"
+#if CONFIG_MUSE_HOME_PAGE
+#include "muse_home.h"
+#endif
 #include "muse_link.h"
 #include "muse_mem.h"
 #include "muse_menu.h"
@@ -189,7 +192,10 @@ bool muse_ui_volume_swiping(void)
     return s_volume_swiping;
 }
 static lv_obj_t *s_settings;
-#if CONFIG_MUSE_LATEST_REPLY
+#if CONFIG_MUSE_HOME_PAGE
+static lv_obj_t *s_home;
+#endif
+#if CONFIG_MUSE_LATEST_REPLY || CONFIG_MUSE_HOME_PAGE
 #define PAGE_DOTS 3
 #else
 #define PAGE_DOTS 2
@@ -1510,6 +1516,10 @@ static void build_screen(void)
 #if CONFIG_MUSE_LATEST_REPLY
         muse_latest_reply_build(s_tv, caption_font_for);
         s_face = lv_tileview_add_tile(s_tv, 1, 0, LV_DIR_HOR);
+#elif CONFIG_MUSE_HOME_PAGE
+        s_home = lv_tileview_add_tile(s_tv, 0, 0, LV_DIR_RIGHT);
+        muse_home_build(s_home);
+        s_face = lv_tileview_add_tile(s_tv, 1, 0, LV_DIR_HOR);
 #else
         s_face = lv_tileview_add_tile(s_tv, 0, 0, LV_DIR_RIGHT);
 #endif
@@ -1523,11 +1533,17 @@ static void build_screen(void)
         s_settings = lv_tileview_add_tile(s_tv,
 #if CONFIG_MUSE_LATEST_REPLY
             2,
+#elif CONFIG_MUSE_HOME_PAGE
+            2,
 #else
             1,
 #endif
             0, LV_DIR_LEFT);
+#if CONFIG_MUSE_HOME_PAGE
+        lv_tileview_set_tile(s_tv, s_home, LV_ANIM_OFF);
+#else
         lv_tileview_set_tile(s_tv, s_face, LV_ANIM_OFF);
+#endif
         lv_obj_add_event_cb(s_tv, tile_changed_cb, LV_EVENT_VALUE_CHANGED, NULL);
         face = s_face;
         if (muse_board->audio_init) {
@@ -2135,6 +2151,8 @@ static void update_chrome(float now)
         bool hide_dots = page && subpage;
 #if CONFIG_MUSE_LATEST_REPLY
         int selected = page ? 2 : lv_tileview_get_tile_active(s_tv) == s_face ? 1 : 0;
+#elif CONFIG_MUSE_HOME_PAGE
+        int selected = page ? 2 : lv_tileview_get_tile_active(s_tv) == s_face ? 1 : 0;
 #else
         int selected = page;
 #endif
@@ -2146,7 +2164,7 @@ static void update_chrome(float now)
             }
             s_shown_page = shown;
         }
-#if CONFIG_MUSE_LATEST_REPLY
+#if CONFIG_MUSE_LATEST_REPLY || CONFIG_MUSE_HOME_PAGE
         muse_settings_ui_tick(page);
 #else
         muse_settings_ui_tick(lv_obj_get_scroll_x(s_tv) > 0);
@@ -2650,6 +2668,17 @@ static void frame_tick(lv_timer_t *timer)
 #endif
         s_last_mode = mode;
     }
+#if CONFIG_MUSE_HOME_PAGE
+    /* Idle on the face for a while: drift back to the home page. Not
+     * while a reply is up for reading, an image is shown or a menu is
+     * open; sleep itself is update_sleep()'s business, just below. */
+    if (s_home && mode == MUSE_MODE_IDLE &&
+        !s_image_dsc.data && !muse_menu_is_open() &&
+        lv_tileview_get_tile_active(s_tv) == s_face &&
+        muse_state_idle_secs() > 45.0f) {
+        lv_tileview_set_tile(s_tv, s_home, LV_ANIM_ON);
+    }
+#endif
     if (update_sleep()) {
         return;
     }
@@ -2688,6 +2717,8 @@ static void frame_tick(lv_timer_t *timer)
     if (s_tv && lv_obj_get_scroll_x(s_tv) !=
 #if CONFIG_MUSE_LATEST_REPLY
         s_w
+#elif CONFIG_MUSE_HOME_PAGE
+        lv_obj_get_x(s_face)   /* the face is the second tile here */
 #else
         0
 #endif

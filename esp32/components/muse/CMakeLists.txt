@@ -69,6 +69,9 @@ if(CONFIG_MUSE_ENABLED)
     else()
         list(APPEND srcs "muse_ui.c" "muse_options_ui.c" "muse_menu.c" "muse_settings_ui.c" "muse_keypad.c" "muse_lv_mem.c")
     endif()
+    if(CONFIG_MUSE_HOME_PAGE)
+        list(APPEND srcs "muse_home.c")   # the idle tile: clock + weather
+    endif()
     if(CONFIG_MUSE_HATCH)
         list(APPEND srcs "muse_chat.c" "muse_account_api.c" "muse_chat_session.cpp" "muse_options_json.c")
         list(APPEND embed "test_reply.mp3")   # muse_hatch_mp3_selftest
