@@ -1,0 +1,67 @@
+# Copyright (c) Meta Platforms, Inc. and affiliates.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Lichuang (LCKFB) "Szpi" ESP32-S3 development board (board X9200-MB):
+# ESP32-S3R8 module with 16 MB flash and 8 MB octal PSRAM, 320x240
+# ST7789 SPI touch LCD (FT6336), ES8311 speaker DAC and ES7210 dual-mic
+# ADC, PCA9557 expander. USB reaches the board through a CH334F hub:
+# the S3's native USB Serial/JTAG (303a:1001) and a CH340 bridge.
+# Pins: xiaozhi-esp32's lckfb/szpi-esp32s3 board and the vendor
+# schematic SCH_X9200-MB-V1.0A_20250828. Load last, after
+# sdkconfig.defaults and sdkconfig.muse.
+CONFIG_IDF_TARGET="esp32s3"
+CONFIG_MUSE_DEVICE_MODEL_ID="muse-gadget-lichuang-dev"
+CONFIG_MUSE_DEVICE_MODEL_NAME="Lichuang Szpi ESP32-S3"
+CONFIG_MUSE_BOARD_LICHUANG_DEV=y
+CONFIG_HOMEHUB_BUTTON_GPIO=0
+CONFIG_ESPTOOLPY_FLASHSIZE_16MB=y
+CONFIG_ESPTOOLPY_FLASHSIZE="16MB"
+CONFIG_ESPTOOLPY_FLASHMODE_DIO=y
+CONFIG_ESP_CONSOLE_USB_SERIAL_JTAG=y
+
+# PSRAM is required for the UI, images, voice session and tunnel.
+CONFIG_SPIRAM=y
+CONFIG_SPIRAM_MODE_OCT=y
+CONFIG_SPIRAM_SPEED_80M=y
+CONFIG_SPIRAM_FETCH_INSTRUCTIONS=y
+CONFIG_SPIRAM_RODATA=y
+CONFIG_SPIRAM_XIP_FROM_PSRAM=y
+CONFIG_FREERTOS_TASK_CREATE_ALLOW_EXT_MEM=y
+CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB=y
+CONFIG_ESP32S3_DATA_CACHE_64KB=y
+CONFIG_ESP32S3_DATA_CACHE_LINE_64B=y
+
+CONFIG_LV_DRAW_SW_DRAW_UNIT_CNT=2
+CONFIG_BT_NIMBLE_MEM_ALLOC_MODE_EXTERNAL=y
+CONFIG_SPIRAM_TRY_ALLOCATE_WIFI_LWIP=y
+# Static buffers in PSRAM, as on the ATK-DNESP32S3-BOX2: without it BLE
+# setup can't find the internal RAM for its task. The module always
+# has PSRAM.
+CONFIG_SPIRAM_ALLOW_BSS_SEG_EXTERNAL_MEMORY=y
+# The avatar's and audio's static buffers too (about 17 KB): only the
+# CPU touches them, and Link and Muse's sessions need the internal RAM.
+CONFIG_MUSE_STATIC_BUFFERS_IN_PSRAM=y
+CONFIG_ESP_WIFI_STATIC_TX_BUFFER_NUM=8
+# Sold to Chinese speakers: captions fall back to Unifont's CJK
+# (about 1.2 MB) instead of showing boxes.
+CONFIG_MUSE_CJK_FONT=y
+# Live voice calls with Muse (experimental): tap to call, Muse
+# answers out loud, no TTS key needed. Turn off in menuconfig if the
+# account's VM refuses calls; voice notes keep working either way.
+CONFIG_MUSE_REALTIME_VOICE=y
+# Spoken replies via Volcano TTS (start_tts in muse_chat_session.cpp).
+# The API key is filled in locally on the build machine; never commit it.
+CONFIG_MUSE_TTS_VOLCANO_API_KEY=""
+CONFIG_MUSE_TTS_VOLCANO_RESOURCE_ID="seed-tts-2.0"
+CONFIG_MUSE_TTS_VOLCANO_SPEAKER="zh_female_xiaohe_uranus_bigtts"
