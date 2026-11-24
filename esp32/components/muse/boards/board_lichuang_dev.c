@@ -72,7 +72,12 @@ static const char *TAG = "board";
 #define LCD_DC GPIO_NUM_39
 #define LCD_RST GPIO_NUM_NC   /* shared board reset line */
 #define LCD_BL GPIO_NUM_42    /* backlight, inverted: low = on (xiaozhi) */
-#define DRAW_BUF_LINES 16
+/* 8 lines, not 16: the double buffer is 320 x lines x 2 B x 2 of
+ * internal DMA RAM, and the Link noise gate will not send
+ * link.register until total free DMA RAM reaches 16 KB. Halving
+ * the buffer frees ~10 KB and lets registration through; the
+ * pages are mostly static, so the extra flushes are invisible. */
+#define DRAW_BUF_LINES 8
 
 #define I2C_SDA GPIO_NUM_1    /* codecs, touch, PCA9557, QMI8658, gauge */
 #define I2C_SCL GPIO_NUM_2

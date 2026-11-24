@@ -74,3 +74,37 @@ CONFIG_MUSE_HOME_PAGE=y
 CONFIG_MUSE_HOME_CITY="上海"
 CONFIG_MUSE_HOME_LAT="31.2304"
 CONFIG_MUSE_HOME_LON="121.4737"
+
+# Komari server-status page between the home page and the Muse face.
+# The panel URL is deliberately left empty in this repo: set it in
+# Settings -> Komari (stored in NVS) or fill it in locally.
+CONFIG_MUSE_KOMARI_PAGE=y
+CONFIG_MUSE_KOMARI_URL=""
+
+# Xiaozhi voice-agent page between Komari and the Muse face; the OTA
+# URL defaults to the official Xiaozhi service (Settings -> Xiaozhi
+# can point it at a self-hosted server; stored in NVS).
+CONFIG_MUSE_XIAOZHI_PAGE=y
+
+# Xiaozhi tasks run with PSRAM stacks: internal RAM on this board is
+# nearly exhausted by the stock firmware.
+CONFIG_SPIRAM_ALLOW_STACK_EXTERNAL_MEMORY=y
+
+# Internal RAM is the scarce resource on this board (TLS setup, task
+# creation and lwIP have all failed for want of it) while PSRAM is
+# plentiful, so push everything that can live there out: mbedTLS
+# allocations (handshake state, record buffers) go to PSRAM and its
+# record buffers size dynamically instead of pinning 2x16 KB per
+# connection, and malloc() only insists on internal RAM up to 4 KB
+# (the shared defaults say 16 KB). The 64 KB internal reserve for
+# DMA-only callers is unchanged.
+CONFIG_MBEDTLS_EXTERNAL_MEM_ALLOC=y
+CONFIG_MBEDTLS_DYNAMIC_BUFFER=y
+CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096
+
+# Muse link tasks (VM lookup) get PSRAM stacks via the SDK's own
+# helper; internal RAM's largest block is only ~2-4 KB at runtime,
+# so the 8 KB internal stack allocation failed ("no memory for
+# its task"). Needs FETCH_INSTRUCTIONS + RODATA in PSRAM (set
+# above) so flash writes keep the cache on.
+CONFIG_HOMEHUB_SETUP_TASKS_IN_PSRAM=y

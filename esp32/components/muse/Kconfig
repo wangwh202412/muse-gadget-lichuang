@@ -950,4 +950,49 @@ endif
         range 5 240
         depends on MUSE_HOME_PAGE
 
+    config MUSE_KOMARI_PAGE
+        bool "Komari server-status page"
+        depends on MUSE_HOME_PAGE
+        help
+          Adds a tile between the home page and the Muse face that
+          rotates through the servers of a Komari monitor panel:
+          online state, CPU / memory / disk usage, network rates,
+          uptime and days to plan expiry, with a bundled country
+          flag per node. The panel URL and the rotation interval
+          are set in Settings -> Komari and stored in NVS.
+
+    config MUSE_KOMARI_URL
+        string "Default Komari panel base URL"
+        depends on MUSE_KOMARI_PAGE
+        default ""
+        help
+          First-run default for the panel address; the settings
+          page can change it afterwards (stored in NVS).
+
+    config MUSE_KOMARI_REFRESH_S
+        int "Komari status refresh (seconds)"
+        depends on MUSE_KOMARI_PAGE
+        default 30
+        range 10 600
+
+    config MUSE_XIAOZHI_PAGE
+        bool "Xiaozhi voice-agent page"
+        depends on MUSE_KOMARI_PAGE
+        help
+          Adds a tile between the Komari page and the Muse face
+          running a Xiaozhi (xiaozhi-esp32 protocol v1) voice agent.
+          While the tile is showing, the talk button is diverted from
+          Muse and toggles a Xiaozhi conversation instead. The
+          backend is chosen by an OTA URL: the official Xiaozhi
+          service by default, or a self-hosted xiaozhi-esp32-server;
+          Settings -> Xiaozhi changes it (stored in NVS).
+
+    config MUSE_XIAOZHI_OTA_URL
+        string "Xiaozhi OTA URL (first-run default)"
+        depends on MUSE_XIAOZHI_PAGE
+        default "https://api.tenclass.net/xiaozhi/ota/"
+        help
+          First-run default for the Xiaozhi OTA endpoint; the
+          settings page can change it afterwards (stored in NVS).
+
 endmenu

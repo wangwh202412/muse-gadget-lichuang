@@ -46,7 +46,7 @@ Pairing: Muse app → Settings → Devices → Developer mode → Add Device →
 `MuseGadget-XXXXXX`, confirm with a BOOT press. The board talks to the
 Muse account it is paired with.
 
-## Status (2026-11-23)
+## Status (2026-11-24)
 
 - Working: display, touch, voice notes with spoken replies (Volcano
   seed-tts-2.0, speaker 小何2.0), settings, Wi-Fi provisioning via the
@@ -57,6 +57,35 @@ Muse account it is paired with.
   auto-slides back to it after 45 s idle. Chinese text uses Noto Sans SC.
 - The weather city is switchable in Settings → City (20 cities,
   persisted in NVS); Shanghai is the default.
+- Komari server page (added 2026-11-24): a tile between the home page
+  and the avatar that rotates through the servers of a Komari panel:
+  country flag, online state, CPU/memory/disk bars, up/down rates,
+  load, and plan days left. It rotates every 10 s by default; tap for
+  the next node. The panel URL and rotation interval are configurable
+  in Settings → Komari (persisted in NVS). Flags are pre-rendered
+  bitmaps (58 countries); the rate arrows are drawn red/green bitmaps
+  (no available font carries arrow glyphs).
+- Xiaozhi page (added 2026-11-24): a tile between Komari and the
+  avatar that runs a Xiaozhi voice-agent session (protocol v1) against
+  the official service by default; Settings → Xiaozhi can point it at
+  a self-hosted server. BOOT starts/ends the conversation while the
+  tile is showing — the talk-button hooks form a chain, one per page.
+  An unbound device shows its activation code on the tile and keeps
+  re-polling until it is bound in the Xiaozhi console. The page
+  shares the avatar page's vertical volume swipe.
+- Komari page updates: BOOT on the tile forces an immediate refresh
+  (state line shows it is refreshing); a fetch cycle now reuses one
+  keep-alive connection, fetches the on-screen node first, and
+  renders each node as its data lands.
+- Muse link and memory work: the setup/helper tasks and the page
+  fetch tasks run on PSRAM stacks, mbedTLS allocates in PSRAM with
+  dynamic record buffers, and the LVGL draw buffer is halved so the
+  link registration clears its DMA headroom gate — the device now
+  registers fully and the raw tunnel comes up. First page fetches
+  are staggered at boot, and the avatar tile shows a "server asleep"
+  hint when Wi-Fi is up but the Muse link stays down (the account's
+  VM suspends when idle; the board reconnects on its own once it is
+  back).
 - Photo notes (GC0308): a backend was written
   (`boards/lichuang_camera.c`, esp32-camera) and then parked on
   2026-11-23 before hardware verification; it is not in this tree.

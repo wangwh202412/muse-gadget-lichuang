@@ -46,6 +46,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 #include "freertos/task.h"
+#include "freertos/idf_additions.h"
 #include "sdkconfig.h"
 
 #include "muse_lang.h"
@@ -578,6 +579,12 @@ static void wx_task(void *arg)
     if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
         ESP_LOGW(TAG, "SNTP init: %s", esp_err_to_name(err));
     }
+    /* Boot has the VM lookup, the Noise connect and the chat
+     * connect all doing TLS in the first ~10 s; a weather TLS in
+     * the same window can fail to even set up (mbedtls -0x008D).
+     * The page shows placeholders until data lands anyway, so
+     * hold the first fetch until the herd has passed. */
+    vTaskDelay(pdMS_TO_TICKS(8000));
     for (;;) {
         if (!muse_wifi_connected()) {
             vTaskDelay(pdMS_TO_TICKS(2000));
@@ -669,6 +676,7 @@ void muse_home_build(lv_obj_t *tile)
 
     s_wx_lock = xSemaphoreCreateMutex();
     lv_timer_create(home_tick, 1000, NULL);
-    xTaskCreate(wx_task, "home_wx", 10240, NULL, 5, NULL);
+    xTaskCreateWithCaps(wx_task, "home_wx", 10240, NULL, 5, NULL,
+                        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     ESP_LOGI(TAG, "home page built for %s", CITIES[s_city_idx].en);
 }

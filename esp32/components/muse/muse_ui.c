@@ -48,6 +48,12 @@
 #if CONFIG_MUSE_HOME_PAGE
 #include "muse_home.h"
 #endif
+#if CONFIG_MUSE_KOMARI_PAGE
+#include "muse_komari.h"
+#if CONFIG_MUSE_XIAOZHI_PAGE
+#include "muse_xiaozhi.h"
+#endif
+#endif
 #include "muse_link.h"
 #include "muse_mem.h"
 #include "muse_menu.h"
@@ -147,7 +153,13 @@ static bool s_note_listening;   /* a toggled note is recording: keep its face up
 /* True while the face tile is the visible tile. Updated in the LVGL task;
  * read from any task (single word, benign if briefly stale). */
 static volatile bool s_face_active = true;
+#if CONFIG_MUSE_XIAOZHI_PAGE
+static volatile bool s_xiaozhi_active;
+#endif
 static lv_obj_t *s_face;
+#if CONFIG_MUSE_XIAOZHI_PAGE
+static lv_obj_t *s_xiaozhi;
+#endif
 
 static void update_tileview_swipe(void)
 {
@@ -165,6 +177,9 @@ static void tile_changed_cb(lv_event_t *e)
 {
     lv_obj_t *tv = lv_event_get_target(e);
     s_face_active = (lv_tileview_get_tile_active(tv) == s_face);
+#if CONFIG_MUSE_XIAOZHI_PAGE
+    s_xiaozhi_active = (lv_tileview_get_tile_active(tv) == s_xiaozhi);
+#endif
 #if CONFIG_MUSE_LATEST_REPLY
     muse_latest_reply_set_visible(lv_tileview_get_tile_active(tv) == muse_latest_reply_tile());
 #endif
@@ -195,7 +210,14 @@ static lv_obj_t *s_settings;
 #if CONFIG_MUSE_HOME_PAGE
 static lv_obj_t *s_home;
 #endif
-#if CONFIG_MUSE_LATEST_REPLY || CONFIG_MUSE_HOME_PAGE
+#if CONFIG_MUSE_KOMARI_PAGE
+static lv_obj_t *s_komari;
+#endif
+#if CONFIG_MUSE_XIAOZHI_PAGE
+#define PAGE_DOTS 5
+#elif CONFIG_MUSE_KOMARI_PAGE
+#define PAGE_DOTS 4
+#elif CONFIG_MUSE_LATEST_REPLY || CONFIG_MUSE_HOME_PAGE
 #define PAGE_DOTS 3
 #else
 #define PAGE_DOTS 2
@@ -1377,21 +1399,34 @@ static void apply_text_size(void)
  * paging, Settings, images and the wake cover keep their own touch handling. */
 static bool volume_swipe_allowed(void)
 {
-    if (!muse_board->audio_init || !s_face_active || !s_swipe_enabled ||
-        s_touch_talk_down || muse_state_asleep() || muse_menu_is_open() ||
-        s_image_dsc.data || !lv_obj_has_flag(s_pair, LV_OBJ_FLAG_HIDDEN) ||
-        !lv_obj_has_flag(s_cover, LV_OBJ_FLAG_HIDDEN) ||
-        (s_tv && lv_obj_get_scroll_x(s_tv) != lv_obj_get_x(s_face))) return false;
+    if (!muse_board->audio_init || !s_swipe_enabled ||
+        s_touch_talk_down || muse_state_asleep() || muse_menu_is_open()) {
+        return false;
+    }
+    if (s_face_active) {
+        if (s_image_dsc.data || !lv_obj_has_flag(s_pair, LV_OBJ_FLAG_HIDDEN) ||
+            !lv_obj_has_flag(s_cover, LV_OBJ_FLAG_HIDDEN) ||
+            (s_tv && lv_obj_get_scroll_x(s_tv) != lv_obj_get_x(s_face))) return false;
 #if CONFIG_MUSE_SMALL_FULL_REPLY
-    if (s_full_reply) return false;
+        if (s_full_reply) return false;
 #endif
 #if CONFIG_MUSE_VOICE_NOTE_TOGGLE
-    if (s_note_listening) return false;
+        if (s_note_listening) return false;
 #endif
 #if CONFIG_MUSE_VIDEO
-    if (muse_video_is_open()) return false;
+        if (muse_video_is_open()) return false;
 #endif
-    return true;
+        return true;
+    }
+#if CONFIG_MUSE_XIAOZHI_PAGE
+    /* The Xiaozhi page has no overlays of its own: the same drag
+     * adjusts the shared codec volume its TTS plays through. */
+    if (s_xiaozhi_active) {
+        if (s_tv && lv_obj_get_scroll_x(s_tv) != lv_obj_get_x(s_xiaozhi)) return false;
+        return true;
+    }
+#endif
+    return false;
 }
 
 static void volume_hint_opacity(void *obj, int32_t opacity)
@@ -1519,7 +1554,19 @@ static void build_screen(void)
 #elif CONFIG_MUSE_HOME_PAGE
         s_home = lv_tileview_add_tile(s_tv, 0, 0, LV_DIR_RIGHT);
         muse_home_build(s_home);
+#if CONFIG_MUSE_KOMARI_PAGE
+        s_komari = lv_tileview_add_tile(s_tv, 1, 0, LV_DIR_HOR);
+        muse_komari_build(s_komari);
+#if CONFIG_MUSE_XIAOZHI_PAGE
+        s_xiaozhi = lv_tileview_add_tile(s_tv, 2, 0, LV_DIR_HOR);
+        muse_xiaozhi_build(s_xiaozhi);
+        s_face = lv_tileview_add_tile(s_tv, 3, 0, LV_DIR_HOR);
+#else
+        s_face = lv_tileview_add_tile(s_tv, 2, 0, LV_DIR_HOR);
+#endif
+#else
         s_face = lv_tileview_add_tile(s_tv, 1, 0, LV_DIR_HOR);
+#endif
 #else
         s_face = lv_tileview_add_tile(s_tv, 0, 0, LV_DIR_RIGHT);
 #endif
@@ -1531,7 +1578,11 @@ static void build_screen(void)
         muse_theme_set_style_bg_color(s_face, lv_color_black(), 0);
         lv_obj_set_style_bg_opa(s_face, LV_OPA_COVER, 0);
         s_settings = lv_tileview_add_tile(s_tv,
-#if CONFIG_MUSE_LATEST_REPLY
+#if CONFIG_MUSE_XIAOZHI_PAGE
+            4,
+#elif CONFIG_MUSE_KOMARI_PAGE
+            3,
+#elif CONFIG_MUSE_LATEST_REPLY
             2,
 #elif CONFIG_MUSE_HOME_PAGE
             2,
@@ -1551,6 +1602,10 @@ static void build_screen(void)
              * to volume rather than scrolling the avatar's children. */
             lv_obj_remove_flag(face, LV_OBJ_FLAG_SCROLLABLE);
             lv_obj_add_event_cb(face, on_volume_swipe, LV_EVENT_ALL, NULL);
+#if CONFIG_MUSE_XIAOZHI_PAGE
+            lv_obj_remove_flag(s_xiaozhi, LV_OBJ_FLAG_SCROLLABLE);
+            lv_obj_add_event_cb(s_xiaozhi, on_volume_swipe, LV_EVENT_ALL, NULL);
+#endif
         }
     }
 
@@ -2152,7 +2207,16 @@ static void update_chrome(float now)
 #if CONFIG_MUSE_LATEST_REPLY
         int selected = page ? 2 : lv_tileview_get_tile_active(s_tv) == s_face ? 1 : 0;
 #elif CONFIG_MUSE_HOME_PAGE
+#if CONFIG_MUSE_XIAOZHI_PAGE
+        int selected = page ? 4 : lv_tileview_get_tile_active(s_tv) == s_face ? 3 :
+                       lv_tileview_get_tile_active(s_tv) == s_xiaozhi ? 2 :
+                       lv_tileview_get_tile_active(s_tv) == s_komari ? 1 : 0;
+#elif CONFIG_MUSE_KOMARI_PAGE
+        int selected = page ? 3 : lv_tileview_get_tile_active(s_tv) == s_face ? 2 :
+                       lv_tileview_get_tile_active(s_tv) == s_komari ? 1 : 0;
+#else
         int selected = page ? 2 : lv_tileview_get_tile_active(s_tv) == s_face ? 1 : 0;
+#endif
 #else
         int selected = page;
 #endif
@@ -2646,6 +2710,26 @@ static void frame_tick(lv_timer_t *timer)
     muse_latest_reply_tick();
 #endif
     update_control_hints(muse_state_mode(NULL));
+    /* Lichuang: name a long Muse outage for what it is. With Wi-Fi
+     * up but the link off ONLINE for over 30 s, the account's VM is
+     * asleep (or its gateway is rejecting upgrades — the 502 state):
+     * the board keeps retrying on its own and reconnects within
+     * seconds once the VM is back, so say that instead of leaving
+     * the face looking dead. */
+    {
+        static int64_t s_link_down_since;
+        int64_t now_us = esp_timer_get_time();
+        if (muse_link_state() == MUSE_LINK_ONLINE ||
+            !muse_wifi_connected()) {
+            s_link_down_since = 0;
+        } else if (!s_link_down_since) {
+            s_link_down_since = now_us;
+        } else if (now_us - s_link_down_since > 30000000 &&
+                   !muse_state_hint_pending() &&
+                   muse_state_mode(NULL) == MUSE_MODE_IDLE) {
+            muse_state_set_hint("服务器休眠中，自动重连中");
+        }
+    }
     if (s_snapshot) {
         s_snapshot = false;
         send_snapshot();

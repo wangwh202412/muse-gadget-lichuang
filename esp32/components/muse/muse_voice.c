@@ -304,8 +304,21 @@ static void pre_put_preroll(void)
 }
 
 /* One 20 ms idle read: feeds the pre-roll ring and the settings mic meter. */
+static volatile bool s_capture_external;
+
+void muse_voice_set_capture_owner(bool external)
+{
+    s_capture_external = external;
+}
+
 static void idle_capture(void)
 {
+    if (s_capture_external) {
+        /* The Xiaozhi tile owns the mic: keep the loop's 20 ms
+         * pacing without touching the channel. */
+        vTaskDelay(pdMS_TO_TICKS(20));
+        return;
+    }
     if (muse_audio_read(s_chunk, MUSE_AUDIO_CHUNK) != ESP_OK) {
         vTaskDelay(pdMS_TO_TICKS(20));
         return;

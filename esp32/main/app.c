@@ -1219,7 +1219,7 @@ static void vm_auth_refresh_task(void *arg) {
             ESP_LOGI(TAG, "skipping VM credential refresh; another operation is active");
             finish_vm_auth_refresh_task();
             stack_monitor_record(NULL);
-            vTaskDelete(NULL);
+            helper_task_delete(NULL);
             return;
         }
     }
@@ -1238,7 +1238,7 @@ static void vm_auth_refresh_task(void *arg) {
     }
     finish_vm_auth_refresh_task();
     stack_monitor_record(NULL);
-    vTaskDelete(NULL);
+    helper_task_delete(NULL);
 }
 
 static void schedule_vm_auth_refresh(void) {
@@ -1258,7 +1258,7 @@ static void schedule_vm_auth_refresh(void) {
     s_last_vm_auth_refresh_attempt_us = now;
     auth_lock_give();
 
-    if (xTaskCreate(vm_auth_refresh_task, "vm_auth_rfsh", 8192, NULL, 4, NULL) != pdPASS) {
+    if (helper_task_create(vm_auth_refresh_task, "vm_auth_rfsh", 12288, NULL, 4, NULL) != pdPASS) {
         auth_lock_take();
         s_vm_auth_refresh_pending = false;
         auth_lock_give();
@@ -2770,7 +2770,7 @@ bool app_hatch_vm_credentials(const char *want_vm, char *vm_id, size_t id_cap,
         .vm_name = vm_name, .name_cap = name_cap,
         .waiter = xTaskGetCurrentTaskHandle(),
     };
-    if (helper_task_create(hatch_vm_task, "muse_vm", 8192, &req, 4, NULL) != pdPASS) {
+    if (helper_task_create(hatch_vm_task, "muse_vm", 12288, &req, 4, NULL) != pdPASS) {
         ESP_LOGW(TAG, "Muse VM lookup: no memory for its task");
         return false;
     }

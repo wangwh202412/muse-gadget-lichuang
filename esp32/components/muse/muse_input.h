@@ -73,6 +73,23 @@ bool muse_input_cpu_pd(void);
 
 /* PTT events are posted to `queue` (items are muse_input_event_t). */
 esp_err_t muse_input_start(QueueHandle_t queue);
+
+/*
+ * Optional PTT divert hook: when one is set, every talk-button event is
+ * offered to it before the event is queued for the voice task, and a
+ * true return consumes the event (it is never queued, and no call mark
+ * is taken for it). MUSE_PTT_END_CALL is never offered. The hook runs
+ * in the input task, so it must not block. Pages register a hook so
+ * the talk button is theirs while their tile is showing (Xiaozhi
+ * toggles its session, Komari forces a refresh) and Muse's the rest
+ * of the time: hooks form a short chain, each is offered the event
+ * in registration order, and the first to consume it wins — pages
+ * self-gate on their tile being active, so order never matters.
+ * Register before muse_input_start().
+ */
+typedef bool (*muse_input_ptt_hook_t)(const muse_input_event_t *ev);
+void muse_input_set_ptt_hook(muse_input_ptt_hook_t hook);
+void muse_input_add_ptt_hook(muse_input_ptt_hook_t hook);
 /* The voice task has entered the call this DOWN's `mark` started, or dropped
  * or rejected that press. Clears the mark only if no newer press has set its
  * own since. */

@@ -45,6 +45,12 @@
 #if CONFIG_MUSE_HOME_PAGE
 #include "muse_home.h"
 #endif
+#if CONFIG_MUSE_KOMARI_PAGE
+#include "muse_komari.h"
+#endif
+#if CONFIG_MUSE_XIAOZHI_PAGE
+#include "muse_xiaozhi.h"
+#endif
 #if CONFIG_MUSE_AVATAR_SYNC
 #include "muse_avatar.h"
 #endif
@@ -165,6 +171,18 @@ static int s_sleep_shown = -1;
 #if CONFIG_MUSE_HOME_PAGE
 static lv_obj_t *s_city, *s_home_city;
 static lv_obj_t *s_city_checks[MUSE_HOME_CITY_MAX], *s_city_rows[MUSE_HOME_CITY_MAX];
+#endif
+
+/* Komari pages (panel URL + rotation interval). */
+#if CONFIG_MUSE_XIAOZHI_PAGE
+static lv_obj_t *s_xiaozhi, *s_home_xiaozhi;
+static lv_obj_t *s_xiaozhi_url_val, *s_xiaozhi_note;
+#endif
+#if CONFIG_MUSE_KOMARI_PAGE
+static lv_obj_t *s_komari, *s_home_komari;
+static lv_obj_t *s_komari_url_val, *s_komari_rot_val, *s_komari_note;
+static lv_obj_t *s_rotate;
+static lv_obj_t *s_rotate_checks[5], *s_rotate_rows[5];
 #endif
 
 /* Battery page. */
@@ -565,6 +583,12 @@ static void drop(lv_obj_t *p)
     lv_obj_t **const pages[] = { &s_wifi, &s_hatch, &s_ble, &s_sound, &s_sleep, &s_battery, &s_power, &s_text, &s_proxy,
 #if CONFIG_MUSE_HOME_PAGE
         &s_city,
+#endif
+#if CONFIG_MUSE_KOMARI_PAGE
+        &s_komari, &s_rotate,
+#endif
+#if CONFIG_MUSE_XIAOZHI_PAGE
+        &s_xiaozhi,
 #endif
 #if CONFIG_MUSE_UI_THEME
         &s_appearance,
@@ -1680,6 +1704,124 @@ static void tick_city(void)
 }
 #endif
 
+/* ---------- Komari ---------- */
+#if CONFIG_MUSE_KOMARI_PAGE
+
+static const int ROTATE_CHOICES[] = { 5, 10, 15, 30, 60 };
+#define ROTATE_COUNT 5
+
+static void tick_komari(void);
+static void tick_rotate(void);
+static void build_rotate_page(lv_obj_t *tile);
+
+/* The rotate page is a child of the Komari page, not of the settings
+ * home, so it has no page_t of its own: navigate like on_nav does. */
+static void on_komari_rotate(lv_event_t *e)
+{
+    (void)e;
+    if (!s_rotate) {
+        build_rotate_page(s_tile);
+    }
+    show(s_rotate);
+    muse_settings_ui_tick(true);
+}
+
+static void on_komari_url_done(const char *text)
+{
+    muse_komari_set_url(text);
+}
+
+static void on_komari_url(lv_event_t *e)
+{
+    (void)e;
+    open_text("Komari panel", muse_komari_url(), false, 127,
+              "Panel base URL", on_komari_url_done, s_komari);
+}
+
+static void build_komari_page(lv_obj_t *tile)
+{
+    lv_obj_t *list;
+    s_komari = page(tile, "KOMARI", true, &list);
+    row(list, NULL, "Panel URL", &s_komari_url_val, on_komari_url, NULL);
+    row(list, LV_SYMBOL_LIST, "Rotate", &s_komari_rot_val,
+        on_komari_rotate, NULL);
+    s_komari_note = note(list, "");
+}
+
+static void tick_komari(void)
+{
+    set_text(s_komari_url_val, muse_komari_url());
+    char buf[64];
+    snprintf(buf, sizeof buf, "%ds", muse_komari_rotate_s());
+    set_text(s_komari_rot_val, buf);
+    muse_komari_status(buf, sizeof buf);
+    set_text(s_komari_note, buf);
+}
+
+static void on_rotate_choice(lv_event_t *e)
+{
+    muse_komari_set_rotate_s(
+        ROTATE_CHOICES[(int)(intptr_t)lv_event_get_user_data(e)]);
+    tick_rotate();
+}
+
+static void build_rotate_page(lv_obj_t *tile)
+{
+    lv_obj_t *list;
+    s_rotate = page(tile, "ROTATE", true, &list);
+    note(list, "Seconds per server on the Komari page:");
+    for (int i = 0; i < ROTATE_COUNT; i++) {
+        char name[8];
+        snprintf(name, sizeof name, "%ds", ROTATE_CHOICES[i]);
+        s_rotate_rows[i] = row(list, NULL, name, &s_rotate_checks[i],
+                               on_rotate_choice, (void *)(intptr_t)i);
+        muse_theme_set_style_text_color(s_rotate_checks[i],
+                                        lv_color_hex(COLOR_ACCENT), 0);
+    }
+}
+
+static void tick_rotate(void)
+{
+    int cur = muse_komari_rotate_s();
+    for (int i = 0; i < ROTATE_COUNT; i++) {
+        set_text(s_rotate_checks[i],
+                 ROTATE_CHOICES[i] == cur ? LV_SYMBOL_OK : "");
+    }
+}
+#endif
+
+/* ---------- Xiaozhi ---------- */
+#if CONFIG_MUSE_XIAOZHI_PAGE
+
+static void on_xiaozhi_url_done(const char *text)
+{
+    muse_xiaozhi_set_ota_url(text);
+}
+
+static void on_xiaozhi_url(lv_event_t *e)
+{
+    (void)e;
+    open_text("Xiaozhi OTA", muse_xiaozhi_ota_url(), false, 127,
+              "OTA URL", on_xiaozhi_url_done, s_xiaozhi);
+}
+
+static void build_xiaozhi_page(lv_obj_t *tile)
+{
+    lv_obj_t *list;
+    s_xiaozhi = page(tile, "XIAOZHI", true, &list);
+    row(list, NULL, "OTA URL", &s_xiaozhi_url_val, on_xiaozhi_url, NULL);
+    s_xiaozhi_note = note(list, "");
+}
+
+static void tick_xiaozhi(void)
+{
+    set_text(s_xiaozhi_url_val, muse_xiaozhi_ota_url());
+    char buf[96];
+    muse_xiaozhi_status(buf, sizeof buf);
+    set_text(s_xiaozhi_note, buf);
+}
+#endif
+
 /* ---------- Battery ---------- */
 
 static void on_battery_reset(lv_event_t *e)
@@ -1881,6 +2023,12 @@ static const page_t SLEEP = { &s_sleep, build_sleep_page };
 #if CONFIG_MUSE_HOME_PAGE
 static const page_t CITY = { &s_city, build_city_page };
 #endif
+#if CONFIG_MUSE_KOMARI_PAGE
+static const page_t KOMARI = { &s_komari, build_komari_page };
+#endif
+#if CONFIG_MUSE_XIAOZHI_PAGE
+static const page_t XIAOZHI = { &s_xiaozhi, build_xiaozhi_page };
+#endif
 static const page_t BATTERY = { &s_battery, build_battery_page };
 static const page_t POWER = { &s_power, build_power_page };
 
@@ -1935,6 +2083,12 @@ static void build_home(lv_obj_t *tile)
 #if CONFIG_MUSE_HOME_PAGE
     row(list, LV_SYMBOL_LIST, "City", &s_home_city, on_nav, (void *)&CITY);
 #endif
+#if CONFIG_MUSE_KOMARI_PAGE
+    row(list, LV_SYMBOL_LIST, "Komari", &s_home_komari, on_nav, (void *)&KOMARI);
+#endif
+#if CONFIG_MUSE_XIAOZHI_PAGE
+    row(list, LV_SYMBOL_LIST, "Xiaozhi", &s_home_xiaozhi, on_nav, (void *)&XIAOZHI);
+#endif
     row(list, LV_SYMBOL_BATTERY_FULL, "Battery", &s_home_battery, on_nav, (void *)&BATTERY);
 #if CONFIG_MUSE_VIDEO
     if (muse_video_supported()) {
@@ -1980,6 +2134,22 @@ static void tick_home(void)
     set_text(s_home_sleep, sleep_name(muse_settings_sleep_s()));
 #if CONFIG_MUSE_HOME_PAGE
     set_text(s_home_city, muse_home_city_name_en(muse_home_city_index()));
+#endif
+#if CONFIG_MUSE_KOMARI_PAGE
+    if (muse_komari_node_count() > 0) {
+        char kbuf[24];
+        snprintf(kbuf, sizeof kbuf, "%d nodes", muse_komari_node_count());
+        set_text(s_home_komari, kbuf);
+    } else {
+        set_text(s_home_komari, "");
+    }
+#endif
+#if CONFIG_MUSE_XIAOZHI_PAGE
+    {
+        char xbuf[32];
+        muse_xiaozhi_status(xbuf, sizeof xbuf);
+        set_text(s_home_xiaozhi, xbuf);
+    }
 #endif
 
     muse_power_t p = muse_state_power();
@@ -2133,6 +2303,16 @@ void muse_settings_ui_tick(bool visible)
 #if CONFIG_MUSE_HOME_PAGE
     } else if (s_current == s_city) {
         tick_city();
+#endif
+#if CONFIG_MUSE_KOMARI_PAGE
+    } else if (s_current == s_komari) {
+        tick_komari();
+    } else if (s_current == s_rotate) {
+        tick_rotate();
+#endif
+#if CONFIG_MUSE_XIAOZHI_PAGE
+    } else if (s_current == s_xiaozhi) {
+        tick_xiaozhi();
 #endif
     } else if (s_current == s_battery) {
         tick_battery();

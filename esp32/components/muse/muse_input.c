@@ -150,10 +150,45 @@ static bool s_awake_held;
 #endif
 static volatile bool s_nap_now;   /* ">nap": asleep, as if on battery, nap without waiting WIFI_NAP_MS */
 
+/* A short chain of page hooks; see muse_input.h. */
+#define PTT_HOOKS_MAX 4
+static muse_input_ptt_hook_t s_ptt_hooks[PTT_HOOKS_MAX];
+static int s_ptt_hook_count;
+
+static void ptt_hook_register(muse_input_ptt_hook_t hook)
+{
+    if (!hook) return;
+    for (int i = 0; i < s_ptt_hook_count; i++) {
+        if (s_ptt_hooks[i] == hook) return;   /* already registered */
+    }
+    if (s_ptt_hook_count < PTT_HOOKS_MAX) {
+        s_ptt_hooks[s_ptt_hook_count++] = hook;
+    }
+}
+
+void muse_input_set_ptt_hook(muse_input_ptt_hook_t hook)
+{
+    ptt_hook_register(hook);
+}
+
+void muse_input_add_ptt_hook(muse_input_ptt_hook_t hook)
+{
+    ptt_hook_register(hook);
+}
+
 static void post(muse_ptt_t type, bool wake)
 {
     muse_input_event_t ev = { .type = type, .wake = wake, .epoch = muse_input_call_epoch(),
                              .at_us = esp_timer_get_time() };
+    if (type != MUSE_PTT_END_CALL) {
+        for (int i = 0; i < s_ptt_hook_count; i++) {
+            if (s_ptt_hooks[i](&ev)) {
+                ESP_LOGI(TAG, "PTT %s diverted by hook",
+                         type == MUSE_PTT_DOWN ? "down" : "up");
+                return;   /* consumed: not queued, no call mark */
+            }
+        }
+    }
     bool pending = type == MUSE_PTT_DOWN && muse_voice_ptt_enabled() && !muse_voice_in_call();
     if (pending) {
         uint32_t mark;

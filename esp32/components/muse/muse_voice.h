@@ -82,6 +82,11 @@ void muse_voice_request_mp3test(void);
 /* Asleep with nothing to play: codecs off, Wi-Fi dozing. */
 bool muse_voice_resting(void);
 
+/* While set, idle capture stands down (another owner — the Xiaozhi
+ * tile — is reading the mic, and the I2S path serves one reader).
+ * Flows are unaffected; the wake word simply hears nothing. */
+void muse_voice_set_capture_owner(bool external);
+
 /* Reply audio has drained: use a quiet avatar pose, retaining reply status,
  * captions and progress. False again as soon as more audio plays. */
 bool muse_voice_reply_waiting(void);

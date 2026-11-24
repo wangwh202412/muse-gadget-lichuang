@@ -72,6 +72,12 @@ if(CONFIG_MUSE_ENABLED)
     if(CONFIG_MUSE_HOME_PAGE)
         list(APPEND srcs "muse_home.c")   # the idle tile: clock + weather
     endif()
+    if(CONFIG_MUSE_KOMARI_PAGE)
+        list(APPEND srcs "muse_komari.c" "komari_flags.c")
+    endif()
+    if(CONFIG_MUSE_XIAOZHI_PAGE)
+        list(APPEND srcs "muse_xiaozhi.c")
+    endif()
     if(CONFIG_MUSE_HATCH)
         list(APPEND srcs "muse_chat.c" "muse_account_api.c" "muse_chat_session.cpp" "muse_options_json.c")
         list(APPEND embed "test_reply.mp3")   # muse_hatch_mp3_selftest
@@ -294,6 +300,9 @@ if(IDF_TARGET STREQUAL "esp32s31")
     list(APPEND muse_priv_requires esp_driver_jpeg esp_driver_ppa)
 endif()
 list(APPEND muse_priv_requires muse_wakeword)   # registers empty unless MUSE_WAKEWORD_ENABLE
+# Xiaozhi page transports (fetched whenever the component builds; the
+# code that uses them is behind CONFIG_MUSE_XIAOZHI_PAGE).
+list(APPEND muse_priv_requires tcp_transport 78__esp-opus)
 
 idf_component_register(
     SRCS ${srcs}

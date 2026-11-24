@@ -16,6 +16,8 @@ dependencies:
   idf:
     version: ">=5.5"
   espressif/cjson: "~1.7"
+  # Xiaozhi page (CONFIG_MUSE_XIAOZHI_PAGE): WebSocket client + Opus.
+  78/esp-opus-encoder: "~2.3"
   joltwallet/littlefs:
     version: "^1.23"
     rules:
