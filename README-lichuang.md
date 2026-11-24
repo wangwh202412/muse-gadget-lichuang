@@ -5,6 +5,17 @@ A board port of Meta's [muse-gadget-sdk](https://github.com/facebookincubator/mu
 board (xiaozhi board name `lichuang-dev`, board id `lichuang_dev`), plus a
 spoken-reply TTS wiring. Everything else is upstream.
 
+## Live photos
+
+<p align="center">
+  <img src="docs/images/live-home.jpg" width="250" alt="Home page: weather and clock">
+  <img src="docs/images/live-komari.jpg" width="250" alt="Komari server page">
+  <img src="docs/images/live-xiaozhi.jpg" width="250" alt="Xiaozhi page">
+  <img src="docs/images/live-muse.jpg" width="250" alt="Muse page: call ended">
+  <img src="docs/images/live-settings.jpg" width="250" alt="Settings page">
+</p>
+<p align="center"><sub>The board running v1.0.0: home (weather clock), Komari, Xiaozhi, Muse, Settings.</sub></p>
+
 ## Board
 
 ESP32-S3R8 (16 MB flash, 8 MB octal PSRAM), 320x240 ST7789 LCD (CS on a

@@ -18,6 +18,17 @@ copyright notices (see LICENSE).
 </p>
 <p align="center"><sub>立创·实战派 ESP32-S3 开发板产品图</sub></p>
 
+## 实拍
+
+<p align="center">
+  <img src="docs/images/live-home.jpg" width="250" alt="首页：天气与时间">
+  <img src="docs/images/live-komari.jpg" width="250" alt="Komari 服务器页">
+  <img src="docs/images/live-xiaozhi.jpg" width="250" alt="小智页">
+  <img src="docs/images/live-muse.jpg" width="250" alt="Muse 页：通话结束">
+  <img src="docs/images/live-settings.jpg" width="250" alt="设置页">
+</p>
+<p align="center"><sub>实拍（v1.0.0）：首页（天气时钟）· Komari 服务器页 · 小智页 · Muse 页 · 设置页</sub></p>
+
 ## 板子
 
 ESP32-S3R8（16 MB flash，8 MB octal PSRAM），320×240 ST7789 LCD（片选在 PCA9557 扩展器上，背光 GPIO42 反相），FT6336 触摸，ES8311 播放 codec + ES7210 双麦，GC0308 摄像头（本树未接入，见下方状态）。
