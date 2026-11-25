@@ -311,6 +311,17 @@ void muse_voice_set_capture_owner(bool external)
     s_capture_external = external;
 }
 
+bool muse_voice_mic_live(void)
+{
+#if CONFIG_MUSE_WAKEWORD_ENABLE
+    return muse_voice_in_call() || s_capture_external || s_button_recording;
+#else
+    /* s_button_recording only exists with the wakeword option, so a
+     * button voice-note hold does not light the icon on this build. */
+    return muse_voice_in_call() || s_capture_external;
+#endif
+}
+
 static void idle_capture(void)
 {
     if (s_capture_external) {

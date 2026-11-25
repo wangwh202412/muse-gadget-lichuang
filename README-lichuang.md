@@ -57,7 +57,7 @@ Pairing: Muse app → Settings → Devices → Developer mode → Add Device →
 `MuseGadget-XXXXXX`, confirm with a BOOT press. The board talks to the
 Muse account it is paired with.
 
-## Status (2026-11-24)
+## Status (2026-11-25)
 
 - Working: display, touch, voice notes with spoken replies (Volcano
   seed-tts-2.0, speaker 小何2.0), settings, Wi-Fi provisioning via the
@@ -66,6 +66,12 @@ Muse account it is paired with.
   time and date plus Open-Meteo weather (current temperature, humidity,
   high/low, 3-day forecast) and air quality (US AQI); the avatar tile
   auto-slides back to it after 45 s idle. Chinese text uses Noto Sans SC.
+  A row of status icons sits left of the clock (added 2026-11-25):
+  Wi-Fi, Bluetooth, speaker, microphone, camera, SD card — lit when
+  available, greyed out when off or not yet available; camera and SD
+  card are placeholders for now. The icons are pre-rendered bitmaps
+  (LVGL symbol glyphs do not render in this build's font); lit and
+  faint are separate bitmaps.
 - The weather city is switchable in Settings → City (20 cities,
   persisted in NVS); Shanghai is the default.
 - Komari server page (added 2026-11-24): a tile between the home page
@@ -93,8 +99,9 @@ Muse account it is paired with.
   dynamic record buffers, and the LVGL draw buffer is halved so the
   link registration clears its DMA headroom gate — the device now
   registers fully and the raw tunnel comes up. First page fetches
-  are staggered at boot, and the avatar tile shows a "server asleep"
-  hint when Wi-Fi is up but the Muse link stays down (the account's
+  are staggered at boot, and the avatar tile shows a
+  "Server asleep, reconnecting..." hint (in English since 2026-11-25)
+  when Wi-Fi is up but the Muse link stays down (the account's
   VM suspends when idle; the board reconnects on its own once it is
   back).
 - Photo notes (GC0308): a backend was written

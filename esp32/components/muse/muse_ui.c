@@ -2727,7 +2727,7 @@ static void frame_tick(lv_timer_t *timer)
         } else if (now_us - s_link_down_since > 30000000 &&
                    !muse_state_hint_pending() &&
                    muse_state_mode(NULL) == MUSE_MODE_IDLE) {
-            muse_state_set_hint("服务器休眠中，自动重连中");
+            muse_state_set_hint("Server asleep, reconnecting...");
         }
     }
     if (s_snapshot) {

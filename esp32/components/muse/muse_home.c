@@ -49,7 +49,11 @@
 #include "freertos/idf_additions.h"
 #include "sdkconfig.h"
 
+#include "muse_ble.h"
 #include "muse_lang.h"
+#include "muse_settings.h"
+#include "muse_status_icons.h"
+#include "muse_voice.h"
 #include "muse_wifi.h"
 
 static const char *TAG = "muse_home";
@@ -61,8 +65,10 @@ static const char *TAG = "muse_home";
 #define COL_TEXT    0xffffff
 #define COL_DIM     0x9db4c0
 #define COL_LINE    0x2a4a66
+#define COL_FAINT   0x4d6675   /* status icon when its thing is off / unavailable */
 
 #define WX_DAYS 3
+#define STAT_N 6   /* status icons left of the clock */
 
 typedef struct {
     int code;          /* WMO weather code */
@@ -114,6 +120,51 @@ static lv_obj_t *mk_label(lv_obj_t *parent, const lv_font_t *font,
     lv_obj_set_pos(l, x, y);
     lv_obj_remove_flag(l, LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
     return l;
+}
+
+/* Status icons, left of the clock: Wi-Fi, Bluetooth, speaker,
+ * microphone, camera, SD card. LVGL symbol glyphs do not render in
+ * lv_font_montserrat_16 on this build (photo 2026-11-25: the whole
+ * row was blank), so every icon is a pre-blended RGB565 bitmap in
+ * muse_status_icons.h, same technique as the Komari arrows; lit and
+ * faint are separate bitmaps, swapped by update_status_icons.
+ * Camera and SD stay faint: the camera backend is parked and there
+ * is no SD driver yet. */
+static lv_obj_t *s_stat[STAT_N];   /* [0] wifi [1] ble [2] speaker [3] mic [4] camera [5] sd */
+
+/* Right-align the icon row against the clock, squeezing the pitch if
+ * the city name runs long. */
+static void layout_status_icons(void)
+{
+    if (!s_stat[0] || !s_time_lbl || !s_city_lbl) return;
+    int pitch = 22;
+    int end = lv_obj_get_x(s_time_lbl) - 8;
+    int start = end - STAT_N * pitch;
+    int city_end = 12 + lv_obj_get_width(s_city_lbl) + 6;
+    if (start < city_end) {
+        pitch = (end - city_end) / STAT_N;
+        if (pitch < 16) pitch = 16;
+        start = end - STAT_N * pitch;
+    }
+    for (int i = 0; i < STAT_N; i++) {
+        lv_obj_set_pos(s_stat[i], start + i * pitch, 12);
+    }
+}
+
+static void update_status_icons(void)
+{
+    if (!s_stat[0]) return;
+    lv_image_set_src(s_stat[0], muse_wifi_connected() ? &stat_wifi_lit
+                                                      : &stat_wifi_faint);
+    muse_ble_status_t bs;
+    muse_ble_status(&bs);
+    lv_image_set_src(s_stat[1], bs.state != MUSE_BLE_OFF ? &stat_ble_lit
+                                                         : &stat_ble_faint);
+    int vol = muse_settings_volume();
+    lv_image_set_src(s_stat[2], vol == 0 ? &stat_spk_mute : &stat_spk_lit);
+    lv_image_set_src(s_stat[3], muse_voice_mic_live() ? &stat_mic_lit
+                                                      : &stat_mic_faint);
+    /* [4] camera and [5] SD card stay faint (src set at build). */
 }
 
 /* Montserrat has no CJK glyphs, so a plain label font draws Chinese as
@@ -310,6 +361,7 @@ void muse_home_set_city(int i)
     }
     if (s_city_lbl) {
         set_cjk(s_city_lbl, CITIES[i].zh, &lv_font_montserrat_20);
+        layout_status_icons();
     }
     s_city_changed = true;   /* the fetch task wakes and refetches */
     ESP_LOGI(TAG, "city -> %s", CITIES[i].en);
@@ -402,6 +454,13 @@ static void home_tick(lv_timer_t *timer)
 {
     (void)timer;
     update_clock();
+    /* Re-run the icon layout here, not just at build: label geometry
+     * reads as 0 until LVGL's first refresh, so the build-time layout
+     * placed the row off-screen (start=-104); once sizes are real the
+     * same call lands it next to the clock, and it also tracks any
+     * later clock/city width change. */
+    layout_status_icons();
+    update_status_icons();
     if (s_wx_dirty) {
         update_weather();
     }
@@ -632,6 +691,21 @@ void muse_home_build(lv_obj_t *tile)
     s_time_lbl = mk_label(tile, &lv_font_montserrat_28, COL_TEXT, 0, 8);
     lv_label_set_text(s_time_lbl, "--:--");
     lv_obj_align(s_time_lbl, LV_ALIGN_TOP_RIGHT, -12, 8);
+
+    /* Status icons, left of the clock. */
+    for (int i = 0; i < STAT_N; i++) {
+        s_stat[i] = lv_image_create(tile);
+        lv_obj_remove_flag(s_stat[i],
+                           LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    }
+    lv_image_set_src(s_stat[0], &stat_wifi_faint);
+    lv_image_set_src(s_stat[1], &stat_ble_faint);
+    lv_image_set_src(s_stat[2], &stat_spk_lit);
+    lv_image_set_src(s_stat[3], &stat_mic_faint);
+    lv_image_set_src(s_stat[4], &stat_cam_faint);
+    lv_image_set_src(s_stat[5], &stat_sd_faint);
+    layout_status_icons();
+    update_status_icons();
 
     lv_obj_t *line = mk_panel(tile, 12, 58, 296, 1, COL_LINE);
     lv_obj_set_style_radius(line, 0, 0);

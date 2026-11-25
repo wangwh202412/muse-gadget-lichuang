@@ -49,6 +49,9 @@ typedef enum {
 } muse_voice_view_t;
 muse_voice_view_t muse_voice_call_view(void);
 bool muse_voice_in_call(void);
+/* True while the mic is live for a session: a Muse call, a button
+ * voice note, or an external capture owner (the Xiaozhi tile). */
+bool muse_voice_mic_live(void);
 bool muse_voice_ptt_call(void);
 bool muse_voice_ptt_enabled(void);   /* next press, not the current call */
 const char *muse_voice_call_label(void);   /* NULL outside a PTT call */
