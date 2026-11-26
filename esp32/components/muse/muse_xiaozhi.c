@@ -55,6 +55,7 @@
 #include "esp_transport_ws.h"
 #include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
+#include "freertos/idf_additions.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
 #include "esp_heap_caps.h"
@@ -64,6 +65,10 @@
 #include "nvs.h"
 #include "opus.h"
 #include "sdkconfig.h"
+
+#if CONFIG_MUSE_LICHUANG_CAMERA
+#include "boards/lichuang_camera.h"
+#endif
 
 static const char *TAG = "muse_xiaozhi";
 
@@ -98,7 +103,7 @@ typedef struct {
  * the only writer). */
 typedef struct {
     uint8_t opcode;
-    uint16_t len;
+    uint32_t len;   /* a camera MCP reply carries a base64 JPEG (QVGA since 2026-11-26; a VGA one exceeded 64 KB, hence 32-bit) */
     uint8_t data[];
 } txpkt_t;
 
@@ -108,6 +113,14 @@ static char s_ota_url[160] = CONFIG_MUSE_XIAOZHI_OTA_URL;
 static bool s_ota_loaded;
 static char s_client_id[40];
 static char s_mac[18];
+
+/* Vision explain endpoint, from the server's initialize request
+ * (params.capabilities.vision {url, token}); per session, in RAM.
+ * The camera tool POSTs the JPEG there and returns the model's text
+ * answer — the server only reads content[0].text from a tool result,
+ * so a base64 image in the result would never be seen. */
+static char s_vision_url[256];
+static char s_vision_token[256];
 
 static void load_settings(void)
 {
@@ -479,10 +492,246 @@ static void ws_queue_send(uint8_t opcode, const void *data, int len)
                                    MALLOC_CAP_SPIRAM);
     if (!tx) return;
     tx->opcode = opcode;
-    tx->len = (uint16_t)len;
+    tx->len = (uint32_t)len;
     memcpy(tx->data, data, len);
     if (xQueueSend(s_txq, &tx, 0) != pdTRUE) free(tx);
 }
+
+#if CONFIG_MUSE_LICHUANG_CAMERA
+#define VISION_BOUNDARY "----ESP32_CAMERA_BOUNDARY"
+#define VISION_RESP_CAP 8192   /* the vision answer is a short text */
+
+static bool http_write_all(esp_http_client_handle_t client,
+                           const void *data, size_t len)
+{
+    const uint8_t *p = (const uint8_t *)data;
+    while (len > 0) {
+        int w = esp_http_client_write(client, (const char *)p, (int)len);
+        if (w <= 0) return false;
+        p += w;
+        len -= (size_t)w;
+    }
+    return true;
+}
+
+/* The vision endpoint answers {"success":true,"response":"..."}. Return
+ * the "response" text (PSRAM), or a copy of the raw body when it is not
+ * that JSON (the stock firmware returns the raw body as-is). NULL when
+ * the endpoint reported failure or the body is empty. */
+static char *vision_answer(const char *body)
+{
+    cJSON *root = cJSON_Parse(body);
+    if (root) {
+        cJSON *ok = cJSON_GetObjectItemCaseSensitive(root, "success");
+        cJSON *resp = cJSON_GetObjectItemCaseSensitive(root, "response");
+        /* The official server answers {"success":true,"filename":...,"text":...}
+         * instead of {"response":...} (self-hosted schema); accept both,
+         * preferring "response". Without this the answer passed to the LLM
+         * is the raw JSON body. */
+        if (!cJSON_IsString(resp) || !resp->valuestring[0]) {
+            resp = cJSON_GetObjectItemCaseSensitive(root, "text");
+        }
+        char *out = NULL;
+        if (cJSON_IsFalse(ok)) {
+            cJSON_Delete(root);
+            return NULL;
+        }
+        if (cJSON_IsString(resp) && resp->valuestring[0]) {
+            out = (char *)heap_caps_malloc(strlen(resp->valuestring) + 1,
+                                          MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            if (out) strcpy(out, resp->valuestring);
+        }
+        cJSON_Delete(root);
+        if (out) return out;
+    }
+    if (!body[0]) return NULL;
+    char *out = (char *)heap_caps_malloc(strlen(body) + 1,
+                                        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (out) strcpy(out, body);
+    return out;
+}
+
+/* POST one JPEG to the vision explain endpoint and return the model's
+ * text answer (malloc'd in PSRAM, or NULL with *error set). The body
+ * is streamed with an explicit Content-Length, never chunked: the
+ * server rejects chunked uploads. */
+static char *vision_explain(const uint8_t *jpg, size_t jpg_len,
+                            const char *question, const char **error)
+{
+    if (!s_vision_url[0]) {
+        if (error) *error = "vision service not available";
+        return NULL;
+    }
+    char head[1024];   /* fixed multipart framing ~220 bytes + the question */
+    int head_len = snprintf(head, sizeof head,
+        "--%s\r\n"
+        "Content-Disposition: form-data; name=\"question\"\r\n\r\n"
+        "%s\r\n"
+        "--%s\r\n"
+        "Content-Disposition: form-data; name=\"file\"; filename=\"camera.jpg\"\r\n"
+        "Content-Type: image/jpeg\r\n\r\n",
+        VISION_BOUNDARY, question, VISION_BOUNDARY);
+    const char *tail = "\r\n--" VISION_BOUNDARY "--\r\n";
+    if (head_len <= 0 || head_len >= (int)sizeof head) {
+        if (error) *error = "vision upload failed";
+        return NULL;
+    }
+    size_t total = (size_t)head_len + jpg_len + strlen(tail);
+    esp_http_client_config_t cfg = {
+        .url = s_vision_url,
+        .method = HTTP_METHOD_POST,
+        .timeout_ms = 25000,
+        .buffer_size = 4096,
+        .buffer_size_tx = 4096,
+        .crt_bundle_attach = esp_crt_bundle_attach,
+    };
+    ESP_LOGI(TAG, "vision: POST start (%u JPEG bytes, endpoint configured)",
+             (unsigned)jpg_len);
+    esp_http_client_handle_t client = esp_http_client_init(&cfg);
+    if (!client) {
+        ESP_LOGE(TAG, "vision: HTTP client init failed");
+        if (error) *error = "vision upload failed";
+        return NULL;
+    }
+    esp_http_client_set_header(client, "Device-Id", s_mac);
+    esp_http_client_set_header(client, "Client-Id", s_client_id);
+    if (s_vision_token[0]) {
+        char auth[300];
+        snprintf(auth, sizeof auth, "Bearer %s", s_vision_token);
+        esp_http_client_set_header(client, "Authorization", auth);
+    }
+    char ctype[128];
+    snprintf(ctype, sizeof ctype, "multipart/form-data; boundary=%s",
+             VISION_BOUNDARY);
+    esp_http_client_set_header(client, "Content-Type", ctype);
+    char *answer = NULL;
+    const char *fail = NULL;
+    int status = 0;
+    if (esp_http_client_open(client, (int)total) != ESP_OK) {
+        fail = "vision upload failed";
+        ESP_LOGE(TAG, "vision: HTTP open failed");
+    } else if (!http_write_all(client, head, (size_t)head_len) ||
+               !http_write_all(client, jpg, jpg_len) ||
+               !http_write_all(client, tail, strlen(tail))) {
+        fail = "vision upload failed";
+        ESP_LOGE(TAG, "vision: multipart write failed");
+    } else if (esp_http_client_fetch_headers(client) < 0) {
+        fail = "vision explain failed";
+        ESP_LOGE(TAG, "vision: response headers failed");
+    } else {
+        status = esp_http_client_get_status_code(client);
+        ESP_LOGI(TAG, "vision: HTTP status=%d", status);
+        if (status != 200) {
+            fail = "vision explain failed";
+        } else {
+            char *resp = (char *)heap_caps_malloc(VISION_RESP_CAP + 1,
+                                                 MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            if (!resp) {
+                fail = "out of memory";
+            } else {
+                int n = esp_http_client_read_response(client, resp, VISION_RESP_CAP);
+                if (n < 0) n = 0;
+                resp[n] = '\0';
+                answer = vision_answer(resp);
+                heap_caps_free(resp);
+                if (!answer) fail = "vision explain failed";
+            }
+        }
+    }
+    esp_http_client_cleanup(client);
+    if (answer) {
+        ESP_LOGI(TAG, "vision: %u bytes -> %d chars: %s",
+                 (unsigned)jpg_len, (int)strlen(answer), answer);
+    } else {
+        ESP_LOGW(TAG, "vision: failed (HTTP %d)", status);
+        if (error) *error = fail ? fail : "vision explain failed";
+    }
+    return answer;
+}
+
+typedef struct {
+    char *id;        /* serialized JSON id fragment (cJSON_PrintUnformatted) */
+    char *question;  /* strdup'd question, or NULL for the default */
+} xz_cam_arg_t;
+
+/* tools/call "camera.capture": runs on its own PSRAM task (a capture
+ * takes a few seconds and must not stall the session task), then hands
+ * the JSON-RPC reply to the session task through s_txq. The capture
+ * is only half the job: the device POSTs the JPEG to the vision
+ * endpoint the server handed out at initialize and returns the
+ * model's text answer, the way the stock firmware does. */
+static void xiaozhi_camera_task(void *arg)
+{
+    xz_cam_arg_t *a = (xz_cam_arg_t *)arg;
+    ESP_LOGI(TAG, "camera.capture: task started; question=%s",
+             a->question ? "provided" : "default");
+    uint8_t *jpg = NULL;
+    size_t jpg_len = 0;
+    const char *error = NULL;
+    char *answer = NULL;
+    if (lichuang_camera_capture_jpeg(&jpg, &jpg_len, &error)) {
+        ESP_LOGI(TAG, "camera.capture: JPEG ready (%u bytes)", (unsigned)jpg_len);
+        answer = vision_explain(jpg, jpg_len,
+                                a->question ? a->question : "请描述这张照片里有什么",
+                                &error);
+    }
+    heap_caps_free(jpg);
+    /* The reply is wrapped like every other MCP reply this client
+     * sends: {"session_id":...,"type":"mcp","payload":{...}}. The
+     * server routes only messages with type "mcp" to its MCP handler;
+     * the earlier unwrapped reply never arrived. The result is the
+     * vision answer as text — the server reads only content[0].text. */
+    char *msg = NULL;
+    if (answer) {
+        cJSON *esc = cJSON_CreateString(answer);
+        char *q = esc ? cJSON_PrintUnformatted(esc) : NULL;
+        cJSON_Delete(esc);
+        if (q) {
+            int n = snprintf(NULL, 0,
+                "{\"session_id\":\"%s\",\"type\":\"mcp\",\"payload\":"
+                "{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"content\":"
+                "[{\"type\":\"text\",\"text\":%s}]}}}",
+                s_session_id, a->id, q);
+            msg = (char *)heap_caps_malloc(n + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            if (msg) {
+                snprintf(msg, n + 1,
+                    "{\"session_id\":\"%s\",\"type\":\"mcp\",\"payload\":"
+                    "{\"jsonrpc\":\"2.0\",\"id\":%s,\"result\":{\"content\":"
+                    "[{\"type\":\"text\",\"text\":%s}]}}}",
+                    s_session_id, a->id, q);
+            }
+            free(q);
+        }
+    }
+    if (!msg) {
+        const char *text = error ? error : "camera capture failed";
+        int n = snprintf(NULL, 0,
+            "{\"session_id\":\"%s\",\"type\":\"mcp\",\"payload\":"
+            "{\"jsonrpc\":\"2.0\",\"id\":%s,\"error\":{\"code\":-32000,\"message\":\"%s\"}}}",
+            s_session_id, a->id, text);
+        msg = (char *)heap_caps_malloc(n + 1, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+        if (msg) {
+            snprintf(msg, n + 1,
+                "{\"session_id\":\"%s\",\"type\":\"mcp\",\"payload\":"
+                "{\"jsonrpc\":\"2.0\",\"id\":%s,\"error\":{\"code\":-32000,\"message\":\"%s\"}}}",
+                s_session_id, a->id, text);
+        }
+    }
+    if (msg) {
+        ESP_LOGI(TAG, "camera.capture: queueing MCP %s",
+                 answer ? "vision result" : "error result");
+        ws_queue_send(WS_TRANSPORT_OPCODES_TEXT, msg, (int)strlen(msg));
+        free(msg);
+    } else {
+        ESP_LOGE(TAG, "camera.capture: could not allocate MCP reply");
+    }
+    heap_caps_free(answer);
+    free(a->id);
+    free(a->question);
+    free(a);
+    vTaskDeleteWithCaps(NULL);
+}
+#endif
 
 static void handle_mcp(cJSON *payload)
 {
@@ -494,11 +743,32 @@ static void handle_mcp(cJSON *payload)
     cJSON_AddStringToObject(reply, "jsonrpc", "2.0");
     cJSON_AddItemToObject(reply, "id", cJSON_Duplicate(id, 1));
     if (!strcmp(method->valuestring, "initialize")) {
+        /* The server hands out its vision endpoint here:
+         * params.capabilities.vision {url, token}. */
+        cJSON *params = cJSON_GetObjectItemCaseSensitive(payload, "params");
+        cJSON *caps = params ? cJSON_GetObjectItemCaseSensitive(params, "capabilities") : NULL;
+        cJSON *vision = caps ? cJSON_GetObjectItemCaseSensitive(caps, "vision") : NULL;
+        if (vision) {
+            cJSON *url = cJSON_GetObjectItemCaseSensitive(vision, "url");
+            cJSON *tok = cJSON_GetObjectItemCaseSensitive(vision, "token");
+            if (cJSON_IsString(url) && url->valuestring) {
+                snprintf(s_vision_url, sizeof s_vision_url, "%s", url->valuestring);
+            }
+            if (cJSON_IsString(tok) && tok->valuestring) {
+                snprintf(s_vision_token, sizeof s_vision_token, "%s", tok->valuestring);
+            }
+            ESP_LOGI(TAG, "vision: endpoint %s",
+                     s_vision_url[0] ? "received" : "empty");
+        } else {
+            s_vision_url[0] = '\0';
+            s_vision_token[0] = '\0';
+            ESP_LOGW(TAG, "vision: initialize did not include endpoint");
+        }
         cJSON *result = cJSON_CreateObject();
         cJSON_AddStringToObject(result, "protocolVersion", "2024-11-05");
-        cJSON *caps = cJSON_CreateObject();
-        cJSON_AddItemToObject(caps, "tools", cJSON_CreateObject());
-        cJSON_AddItemToObject(result, "capabilities", caps);
+        cJSON *result_caps = cJSON_CreateObject();
+        cJSON_AddItemToObject(result_caps, "tools", cJSON_CreateObject());
+        cJSON_AddItemToObject(result, "capabilities", result_caps);
         cJSON *info = cJSON_CreateObject();
         cJSON_AddStringToObject(info, "name", "muse-xiaozhi");
         cJSON_AddStringToObject(info, "version", "1.0.0");
@@ -506,8 +776,68 @@ static void handle_mcp(cJSON *payload)
         cJSON_AddItemToObject(reply, "result", result);
     } else if (!strcmp(method->valuestring, "tools/list")) {
         cJSON *result = cJSON_CreateObject();
-        cJSON_AddItemToObject(result, "tools", cJSON_CreateArray());
+        cJSON *tools = cJSON_CreateArray();
+#if CONFIG_MUSE_LICHUANG_CAMERA
+        cJSON *cam = cJSON_CreateObject();
+        cJSON_AddStringToObject(cam, "name", "camera.capture");
+        cJSON_AddStringToObject(cam, "description",
+            "拍一张照片，看看眼前的东西。调用后返回对照片的文字描述。\n"
+            "Args:\n"
+            "  `question`: 想问关于照片的问题，例如“这是什么？”");
+        cJSON *schema = cJSON_CreateObject();
+        cJSON_AddStringToObject(schema, "type", "object");
+        cJSON *props = cJSON_CreateObject();
+        cJSON *q = cJSON_CreateObject();
+        cJSON_AddStringToObject(q, "type", "string");
+        cJSON_AddStringToObject(q, "description", "想问关于照片的问题");
+        cJSON_AddItemToObject(props, "question", q);
+        cJSON_AddItemToObject(schema, "properties", props);
+        cJSON *req = cJSON_CreateArray();
+        cJSON_AddItemToArray(req, cJSON_CreateString("question"));
+        cJSON_AddItemToObject(schema, "required", req);
+        cJSON_AddItemToObject(cam, "inputSchema", schema);
+        cJSON_AddItemToArray(tools, cam);
+#endif
+        cJSON_AddItemToObject(result, "tools", tools);
         cJSON_AddItemToObject(reply, "result", result);
+    } else if (!strcmp(method->valuestring, "tools/call")) {
+        cJSON *params = cJSON_GetObjectItemCaseSensitive(payload, "params");
+        cJSON *name = params ? cJSON_GetObjectItemCaseSensitive(params, "name") : NULL;
+        bool handled = false;
+#if CONFIG_MUSE_LICHUANG_CAMERA
+        if (cJSON_IsString(name) && !strcmp(name->valuestring, "camera.capture")) {
+            cJSON *args = params ? cJSON_GetObjectItemCaseSensitive(params, "arguments") : NULL;
+            cJSON *q = args ? cJSON_GetObjectItemCaseSensitive(args, "question") : NULL;
+            xz_cam_arg_t *cam_arg = (xz_cam_arg_t *)heap_caps_malloc(sizeof(xz_cam_arg_t),
+                                        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+            char *id_json = cJSON_PrintUnformatted(id);
+            if (cam_arg && id_json) {
+                cam_arg->id = id_json;
+                cam_arg->question = (cJSON_IsString(q) && q->valuestring[0])
+                                        ? strdup(q->valuestring) : NULL;
+                if (xTaskCreateWithCaps(xiaozhi_camera_task, "xz_cam", 16384,
+                                cam_arg, 4, NULL,
+                                MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) == pdPASS) {
+                    cJSON_Delete(reply);   /* wrap is built after this chain; the task sends its own */
+                    return;
+                }
+                free(cam_arg->question);
+            }
+            free(cam_arg);
+            free(id_json);
+            cJSON *error = cJSON_CreateObject();
+            cJSON_AddNumberToObject(error, "code", -32000);
+            cJSON_AddStringToObject(error, "message", "camera busy");
+            cJSON_AddItemToObject(reply, "error", error);
+            handled = true;
+        }
+#endif
+        if (!handled) {
+            cJSON *error = cJSON_CreateObject();
+            cJSON_AddNumberToObject(error, "code", -32602);
+            cJSON_AddStringToObject(error, "message", "unknown tool");
+            cJSON_AddItemToObject(reply, "error", error);
+        }
     } else {
         cJSON *error = cJSON_CreateObject();
         cJSON_AddNumberToObject(error, "code", -32601);

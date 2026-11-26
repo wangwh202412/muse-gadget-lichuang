@@ -163,6 +163,9 @@ if(CONFIG_MUSE_ENABLED)
         list(APPEND srcs "boards/board_aipi.c")
     elseif(CONFIG_MUSE_BOARD_LICHUANG_DEV)
         list(APPEND srcs "boards/board_lichuang_dev.c")
+        if(CONFIG_MUSE_LICHUANG_CAMERA)
+            list(APPEND srcs "boards/lichuang_camera.c")
+        endif()
     elseif(CONFIG_MUSE_BOARD_ATK_DNESP32S3_BOX)
         list(APPEND srcs "boards/board_atk_dnesp32s3_box.c")
     elseif(CONFIG_MUSE_BOARD_ATK_DNESP32S3_BOX2)
@@ -290,6 +293,12 @@ set(muse_priv_requires
     # before Kconfig values exist, so these can't depend on it; only the code does.
     fatfs esp_driver_sdspi sdmmc)
 list(APPEND muse_priv_requires camera)
+# The lichuang-dev GC2145 driver (CONFIG_MUSE_LICHUANG_CAMERA); Kconfig is
+# not loaded yet when requirements expand, so this can't depend on it.
+list(APPEND muse_priv_requires esp32-camera)
+# The lichuang-dev GC2145 has no JPEG encoder (CONFIG_MUSE_LICHUANG_CAMERA):
+# RGB565 frames are software-encoded with esp_new_jpeg. Same reason as above.
+list(APPEND muse_priv_requires esp_new_jpeg)
 # The P4 camera's JPEG encoder; Kconfig is not loaded yet when requirements expand.
 if(IDF_TARGET STREQUAL "esp32p4")
     list(APPEND muse_priv_requires esp_driver_jpeg)

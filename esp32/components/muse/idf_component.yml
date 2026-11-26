@@ -18,6 +18,13 @@ dependencies:
   espressif/cjson: "~1.7"
   # Xiaozhi page (CONFIG_MUSE_XIAOZHI_PAGE): WebSocket client + Opus.
   78/esp-opus-encoder: "~2.3"
+  # Lichuang camera (CONFIG_MUSE_LICHUANG_CAMERA): GC2145 driver;
+  # the component carries the sensor (sensors/gc2145.c). Fetched
+  # whenever this component builds; the code using it is Kconfig-gated.
+  espressif/esp32-camera: "~2.1"
+  # GC2145 has no JPEG encoder, so frames are captured as RGB565 and
+  # software-encoded with esp_new_jpeg (SIMD on the S3).
+  espressif/esp_new_jpeg: "~1.0.2"
   joltwallet/littlefs:
     version: "^1.23"
     rules:

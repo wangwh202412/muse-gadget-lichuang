@@ -400,9 +400,21 @@ menu "Muse"
             memory and preview decoding shares CPU time with voice and Link.
             Leave disabled to build without camera support.
 
+    config MUSE_LICHUANG_CAMERA
+        bool "Lichuang ESP32-S3 GC2145 camera capture"
+        depends on MUSE_BOARD_LICHUANG_DEV && SPIRAM
+        default n
+        help
+            Enable the camera.capture Home Link command, photo
+            notes and the Xiaozhi MCP camera tool on the
+            lichuang-dev board (GC2145 over DVP: one VGA RGB565
+            frame in PSRAM, software-encoded to JPEG per capture).
+            The sensor is powered
+            down after each frame, so it holds no DMA while idle.
+
     config MUSE_PHOTO_NOTES
         bool "Photo with voice notes"
-        depends on MUSE_WATCHER_CAMERA && MUSE_HATCH
+        depends on (MUSE_WATCHER_CAMERA || MUSE_LICHUANG_CAMERA) && MUSE_HATCH
         default y
         help
             Adds "Photo with voice notes" to Settings, off until the person

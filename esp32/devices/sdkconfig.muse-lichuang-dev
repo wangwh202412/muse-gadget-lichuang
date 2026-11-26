@@ -108,3 +108,8 @@ CONFIG_SPIRAM_MALLOC_ALWAYSINTERNAL=4096
 # its task"). Needs FETCH_INSTRUCTIONS + RODATA in PSRAM (set
 # above) so flash writes keep the cache on.
 CONFIG_HOMEHUB_SETUP_TASKS_IN_PSRAM=y
+
+# Camera: GC2145 capture for photo notes, the camera.capture Home
+# Link command and the Xiaozhi MCP camera tool (QVGA RGB565, PSRAM,
+# software JPEG).
+CONFIG_MUSE_LICHUANG_CAMERA=y

@@ -55,6 +55,7 @@
 #include "muse_status_icons.h"
 #include "muse_voice.h"
 #include "muse_wifi.h"
+#include "muse_wx_icons.h"
 
 static const char *TAG = "muse_home";
 
@@ -69,6 +70,10 @@ static const char *TAG = "muse_home";
 
 #define WX_DAYS 3
 #define STAT_N 6   /* status icons left of the clock */
+#define STAT_ICON_PX 20   /* SZPI status-bar icon size */
+
+/* Current-condition weather icon (36x36, muse_wx_icons.h, pre-blended
+ * onto COL_PANEL): one per WMO-code group, same groups as wmo_text. */
 
 typedef struct {
     int code;          /* WMO weather code */
@@ -95,6 +100,7 @@ static lv_obj_t *s_city_lbl;
 static lv_obj_t *s_time_lbl;
 static lv_obj_t *s_date_lbl;
 static lv_obj_t *s_temp_lbl;
+static lv_obj_t *s_wx_icon;    /* colorful condition icon, main panel */
 static lv_obj_t *s_cond_lbl;
 static lv_obj_t *s_hilo_lbl;
 static lv_obj_t *s_hum_lbl;
@@ -133,7 +139,12 @@ static lv_obj_t *mk_label(lv_obj_t *parent, const lv_font_t *font,
 static lv_obj_t *s_stat[STAT_N];   /* [0] wifi [1] ble [2] speaker [3] mic [4] camera [5] sd */
 
 /* Right-align the icon row against the clock, squeezing the pitch if
- * the city name runs long. */
+ * the city name runs long. SZPI's status bar (28 px, everything
+ * vertically centered) is the reference: the row, the city and the
+ * clock share one centerline -- the clock's, since it is the tallest
+ * element. Label geometry reads as 0 until LVGL's first refresh, so
+ * this runs again from the 1 s tick and fixes itself once sizes are
+ * real (build-time call alone placed the row off-screen, -104). */
 static void layout_status_icons(void)
 {
     if (!s_stat[0] || !s_time_lbl || !s_city_lbl) return;
@@ -143,11 +154,18 @@ static void layout_status_icons(void)
     int city_end = 12 + lv_obj_get_width(s_city_lbl) + 6;
     if (start < city_end) {
         pitch = (end - city_end) / STAT_N;
-        if (pitch < 16) pitch = 16;
+        if (pitch < STAT_ICON_PX) pitch = STAT_ICON_PX;
         start = end - STAT_N * pitch;
     }
+    int clock_h = lv_obj_get_height(s_time_lbl);
+    int cy = (clock_h > 0) ? lv_obj_get_y(s_time_lbl) + clock_h / 2 : 22;
+    int icon_y = cy - STAT_ICON_PX / 2;
     for (int i = 0; i < STAT_N; i++) {
-        lv_obj_set_pos(s_stat[i], start + i * pitch, 12);
+        lv_obj_set_pos(s_stat[i], start + i * pitch, icon_y);
+    }
+    int city_h = lv_obj_get_height(s_city_lbl);
+    if (city_h > 0) {
+        lv_obj_set_y(s_city_lbl, cy - city_h / 2);
     }
 }
 
@@ -243,6 +261,23 @@ static const char *wmo_text(int code)
     case 85: case 86: return "阵雪";
     case 95: case 96: case 99: return "雷阵雨";
     default: return "--";
+    }
+}
+
+static const lv_img_dsc_t *wx_icon_for_code(int code)
+{
+    switch (code) {
+    case 0: return &wx_clear;
+    case 1: case 2: return &wx_partly;
+    case 3: return &wx_cloudy;
+    case 45: case 48: return &wx_fog;
+    case 51: case 53: case 55: case 56: case 57:
+    case 61: case 63: case 65: case 66: case 67:
+    case 80: case 81: case 82: return &wx_rain;
+    case 71: case 73: case 75: case 77:
+    case 85: case 86: return &wx_snow;
+    case 95: case 96: case 99: return &wx_thunder;
+    default: return &wx_cloudy;
     }
 }
 
@@ -413,6 +448,8 @@ static void update_weather(void)
     snprintf(buf, sizeof buf, "%.0f°", (double)w.cur_temp);
     lv_label_set_text(s_temp_lbl, buf);
     set_cjk(s_cond_lbl, wmo_text(w.cur_code), &lv_font_montserrat_20);
+    lv_image_set_src(s_wx_icon, wx_icon_for_code(w.cur_code));
+    lv_obj_remove_flag(s_wx_icon, LV_OBJ_FLAG_HIDDEN);
     snprintf(buf, sizeof buf, "最高 %.0f°  最低 %.0f°",
              (double)w.days[0].tmax, (double)w.days[0].tmin);
     set_cjk(s_hilo_lbl, buf, &lv_font_montserrat_14);
@@ -683,10 +720,12 @@ void muse_home_build(lv_obj_t *tile)
     lv_obj_set_scrollbar_mode(tile, LV_SCROLLBAR_MODE_OFF);
     lv_obj_remove_flag(tile, LV_OBJ_FLAG_SCROLLABLE);
 
-    /* Top bar: city and date on the left, the clock on the right. */
-    s_city_lbl = mk_label(tile, &lv_font_montserrat_20, COL_TEXT, 12, 8);
+    /* Top bar: city and date on the left, the clock on the right.
+     * City/date y are initial values; the 1 s tick centers the city
+     * on the clock's centerline (see layout_status_icons). */
+    s_city_lbl = mk_label(tile, &lv_font_montserrat_20, COL_TEXT, 12, 11);
     set_cjk(s_city_lbl, CITIES[s_city_idx].zh, &lv_font_montserrat_20);
-    s_date_lbl = mk_label(tile, &lv_font_montserrat_14, COL_DIM, 12, 34);
+    s_date_lbl = mk_label(tile, &lv_font_montserrat_14, COL_DIM, 12, 38);
     set_cjk(s_date_lbl, "等待对时", &lv_font_montserrat_14);
     s_time_lbl = mk_label(tile, &lv_font_montserrat_28, COL_TEXT, 0, 8);
     lv_label_set_text(s_time_lbl, "--:--");
@@ -710,16 +749,24 @@ void muse_home_build(lv_obj_t *tile)
     lv_obj_t *line = mk_panel(tile, 12, 58, 296, 1, COL_LINE);
     lv_obj_set_style_radius(line, 0, 0);
 
-    /* Main panel: current conditions. */
+    /* Main panel: current conditions. The colorful condition icon
+     * sits left of the temperature (36 px, centered on the temp row);
+     * it stays hidden until the first valid fetch. */
     lv_obj_t *main_panel = mk_panel(tile, 8, 66, 304, 84, COL_PANEL);
+    s_wx_icon = lv_image_create(main_panel);
+    lv_obj_remove_flag(s_wx_icon,
+                       LV_OBJ_FLAG_CLICKABLE | LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_set_pos(s_wx_icon, 12, 8);
+    lv_image_set_src(s_wx_icon, &wx_cloudy);
+    lv_obj_add_flag(s_wx_icon, LV_OBJ_FLAG_HIDDEN);
     s_temp_lbl = mk_label(main_panel, &lv_font_montserrat_28, COL_TEXT,
-                          14, 10);
+                          56, 10);
     lv_label_set_text(s_temp_lbl, "--°");
     s_cond_lbl = mk_label(main_panel, &lv_font_montserrat_20, COL_TEXT,
-                          110, 12);
+                          140, 12);
     set_cjk(s_cond_lbl, "加载中", &lv_font_montserrat_20);
     s_hilo_lbl = mk_label(main_panel, &lv_font_montserrat_14, COL_DIM,
-                          110, 44);
+                          140, 44);
     s_hum_lbl = mk_label(main_panel, &lv_font_montserrat_14, COL_DIM,
                          14, 52);
     s_aqi_chip = mk_panel(main_panel, 216, 10, 76, 28, 0x3fb950);

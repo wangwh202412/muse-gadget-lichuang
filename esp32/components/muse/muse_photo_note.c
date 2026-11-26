@@ -39,11 +39,15 @@
 #include "boards/watcher_camera.h"
 #define capture_base64 watcher_camera_capture
 #define capture_done watcher_camera_preview_close
+#elif CONFIG_MUSE_LICHUANG_CAMERA
+#include "boards/lichuang_camera.h"
+#define capture_base64 lichuang_camera_capture
+#define capture_done lichuang_camera_done
 #endif
 
 static const char *TAG = "muse_photo";
 
-#define WAIT_MS 3000      /* after the release: a capture takes under a second, start-up included */
+#define WAIT_MS 9000      /* after the release: a warm capture takes ~2.5 s, the first capture after boot ~5.5 s (sensor cold start); a capture that has to re-sync a stuck sensor (reset + retry) can take ~7 s */
 #define HANDOFF_MS 1500   /* a photo being queued: muse_chat_attach_jpeg waits up to a second */
 
 enum { PHOTO_NONE, PHOTO_TAKING, PHOTO_TAKEN, PHOTO_FAILED };
@@ -96,7 +100,7 @@ void muse_photo_note_begin(bool press)
     atomic_store(&s_state, PHOTO_TAKING);
     atomic_store(&s_capturing, true);
     void *note = (void *)(uintptr_t)muse_chat_note_id();   /* the photo goes with this note only */
-    if (xTaskCreateWithCaps(capture_task, "photo_note", 8192, note, 4, NULL,
+    if (xTaskCreateWithCaps(capture_task, "photo_note", 16384, note, 4, NULL,
                             MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
         ESP_LOGW(TAG, "no photo: couldn't start the capture");
         atomic_store(&s_capturing, false);

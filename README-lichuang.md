@@ -14,13 +14,14 @@ spoken-reply TTS wiring. Everything else is upstream.
   <img src="docs/images/live-muse.jpg" width="250" alt="Muse page: call ended">
   <img src="docs/images/live-settings.jpg" width="250" alt="Settings page">
 </p>
-<p align="center"><sub>The board running v1.0.0: home (weather clock), Komari, Xiaozhi, Muse, Settings.</sub></p>
+<p align="center"><sub>The board running v1.1.0: home (weather clock), Komari, Xiaozhi, Muse, Settings.</sub></p>
 
 ## Board
 
 ESP32-S3R8 (16 MB flash, 8 MB octal PSRAM), 320x240 ST7789 LCD (CS on a
 PCA9557 expander, backlight GPIO42 inverted), FT6336 touch, ES8311 playback
-codec + ES7210 dual mic, GC0308 camera (not wired in this tree, see Status).
+codec + ES7210 dual mic, GC2145 camera (wired in, see Status; the board
+docs say GC0308, but the hardware PID reads 0x2145).
 
 ## Changes vs upstream
 
@@ -34,6 +35,10 @@ codec + ES7210 dual mic, GC0308 camera (not wired in this tree, see Status).
   Volcano Engine Doubao TTS (v3 unidirectional HTTP, MP3 streamed into the
   stock decoder): voice-note replies are spoken aloud. Configured by
   `MUSE_TTS_VOLCANO_API_KEY` / `_RESOURCE_ID` / `_SPEAKER` in Kconfig.
+- `esp32/components/muse/boards/lichuang_camera.c` / `.h` — the camera
+  (GC2145, see Status): QVGA capture, software JPEG encoding, big-endian
+  RGB565 byte-swap; shared by Muse photo notes, the `camera.capture`
+  command, and the Xiaozhi MCP vision tool.
 
 ## Secrets — read before committing
 
@@ -57,21 +62,24 @@ Pairing: Muse app → Settings → Devices → Developer mode → Add Device →
 `MuseGadget-XXXXXX`, confirm with a BOOT press. The board talks to the
 Muse account it is paired with.
 
-## Status (2026-11-25)
+## Status (2026-11-26)
 
 - Working: display, touch, voice notes with spoken replies (Volcano
   seed-tts-2.0, speaker 小何2.0), settings, Wi-Fi provisioning via the
-  app, realtime voice calls.
+  app, realtime voice calls, photos (see below).
 - Home page (added 2026-11-23): the default boot/idle tile shows the
   time and date plus Open-Meteo weather (current temperature, humidity,
   high/low, 3-day forecast) and air quality (US AQI); the avatar tile
   auto-slides back to it after 45 s idle. Chinese text uses Noto Sans SC.
-  A row of status icons sits left of the clock (added 2026-11-25):
-  Wi-Fi, Bluetooth, speaker, microphone, camera, SD card — lit when
-  available, greyed out when off or not yet available; camera and SD
-  card are placeholders for now. The icons are pre-rendered bitmaps
-  (LVGL symbol glyphs do not render in this build's font); lit and
-  faint are separate bitmaps.
+  A 36x36 weather icon sits left of the temperature (added 2026-11-25:
+  clear/partly cloudy/cloudy/fog/rain/snow/thunder, mapped from the
+  weather code). A row of status icons sits left of the clock (added
+  2026-11-25): Wi-Fi, Bluetooth, speaker, microphone, camera, SD card —
+  lit when available, greyed out when off or not yet available; camera
+  and SD card are placeholders for now. The icons are pre-rendered
+  bitmaps (LVGL symbol glyphs do not render in this build's font); lit
+  and faint are separate bitmaps. The icons are 20x20 and share the
+  clock/city centre line.
 - The weather city is switchable in Settings → City (20 cities,
   persisted in NVS); Shanghai is the default.
 - Komari server page (added 2026-11-24): a tile between the home page
@@ -104,6 +112,24 @@ Muse account it is paired with.
   when Wi-Fi is up but the Muse link stays down (the account's
   VM suspends when idle; the board reconnects on its own once it is
   back).
-- Photo notes (GC0308): a backend was written
-  (`boards/lichuang_camera.c`, esp32-camera) and then parked on
-  2026-11-23 before hardware verification; it is not in this tree.
+- Photos (added 2026-11-25, working in v1.1.0): the on-board camera is
+  a GC2145 (hardware PID 0x2145; the board docs say GC0308, which is
+  wrong) with no JPEG encoder; frames are captured as RGB565 and
+  software-encoded to JPEG with esp_new_jpeg, QVGA 320x240. The GC2145
+  sends RGB565 big-endian on the DVP bus while the encoder expects
+  little-endian, so every pixel is byte-swapped first — without it,
+  dark neutrals turn magenta and bright areas go green. Datasheet:
+  `docs/GC2145-CSP-Datasheet-V1.0-20141215.pdf`. One capture path serves
+  three callers: Muse photo notes (Settings → Sound → Photo with voice
+  notes ON, hold BOOT and speak, the photo rides on the voice note and
+  Muse replies with a description), the `camera.capture` command (sent
+  by the server-side chat Muse, returns one base64 JPEG), and the
+  Xiaozhi MCP vision tool (Xiaozhi calls `camera.capture`, the board
+  captures and POSTs the JPEG to the vision endpoint, returning its
+  text answer). Note: the realtime voice model cannot call
+  `camera.capture` (proven from logs) — use photo notes to let Muse see.
+  A photo lives in PSRAM for ~1-3 s only and is never stored on the
+  device. Fixed in v1.1.0: truncated VGA frames (switched to QVGA),
+  every second capture repeating the previous image (two buffers +
+  GRAB_LATEST), magenta/green noise (copy to a private buffer and
+  encode that, so the encoder only reads memory the DMA cannot reach).

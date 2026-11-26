@@ -100,6 +100,9 @@
 #elif CONFIG_MUSE_MOSAICO_CAMERA
 #include "boards/mosaico_camera.h"
 #define camera_capture_base64 mosaico_camera_capture
+#elif CONFIG_MUSE_LICHUANG_CAMERA
+#include "boards/lichuang_camera.h"
+#define camera_capture_base64 lichuang_camera_capture
 #endif
 #if CONFIG_MUSE_ENABLED
 #include "muse_glue.h"
@@ -1753,7 +1756,7 @@ static void draw_url_done(const image_fetch_result_t *r, void *user) {
 }
 #endif
 
-#if CONFIG_MUSE_WATCHER_CAMERA || CONFIG_MUSE_P4_CSI_CAMERA || CONFIG_MUSE_MOSAICO_CAMERA
+#if CONFIG_MUSE_WATCHER_CAMERA || CONFIG_MUSE_P4_CSI_CAMERA || CONFIG_MUSE_MOSAICO_CAMERA || CONFIG_MUSE_LICHUANG_CAMERA
 typedef struct {
     noise_ctrl_session_generation_t session_generation;
     char request_id[64];
@@ -2180,13 +2183,13 @@ static cJSON *on_ws_command(
         return result;
     }
 #endif
-#if CONFIG_MUSE_WATCHER_CAMERA || CONFIG_MUSE_P4_CSI_CAMERA || CONFIG_MUSE_MOSAICO_CAMERA
+#if CONFIG_MUSE_WATCHER_CAMERA || CONFIG_MUSE_P4_CSI_CAMERA || CONFIG_MUSE_MOSAICO_CAMERA || CONFIG_MUSE_LICHUANG_CAMERA
     if (strcmp(command, "camera.capture") == 0) {
         watcher_camera_task_args_t *args = calloc(1, sizeof(*args));
         if (!args) return command_error("out_of_memory", "failed to allocate camera request");
         args->session_generation = session_generation;
         strncpy(args->request_id, request_id, sizeof(args->request_id) - 1);
-        if (xTaskCreateWithCaps(watcher_camera_capture_task, "camera_capture", 8192,
+        if (xTaskCreateWithCaps(watcher_camera_capture_task, "camera_capture", 16384,
                                 args, 4, NULL, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT) != pdPASS) {
             free(args);
             return command_error("out_of_memory", "failed to start camera capture");
