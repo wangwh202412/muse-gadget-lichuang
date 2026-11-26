@@ -69,3 +69,31 @@ tools/muse/board.sh flash lichuang /dev/cu.usbmodem112301   # 串口按实际设
 - Komari 页更新：本页按 BOOT 立即刷新（状态行会显示刷新中）；一轮拉取改为复用一条 keep-alive 连接，先拉当前显示的节点，每台数据到达即上屏。
 - Muse 链路与内存：设置/辅助任务与各页拉取任务的栈移到 PSRAM，mbedTLS 在 PSRAM 分配并使用动态记录缓冲，LVGL 绘图缓冲减半使链路注册能越过 DMA 余量门槛——设备现在能完整注册、原始隧道可通。开机首次拉取错峰进行；WiFi 已通但 Muse 链路长时间未连时，头像页会提示 "Server asleep, reconnecting..."（2026-11-25 改为英文；账号的 VM 空闲会休眠，恢复后板子自动重连）。
 - 拍照（2026-11-25 新增，v1.1.0 可用）：板载摄像头实为 GC2145（硬件 PID 0x2145，板文档写的 GC0308 是错的），没有 JPEG 编码器；拍 RGB565 后用 esp_new_jpeg 软件编码，QVGA 320×240。GC2145 在 DVP 总线上发大端 RGB565，编码器要小端，须逐像素换字节，否则暗色变品红、亮处变绿。数据手册见 `docs/GC2145-CSP-Datasheet-V1.0-20141215.pdf`。三条路共用同一份拍照代码：Muse 语音拍照（设置 → Sound → Photo with voice notes 打开，按住 BOOT 说话，照片附在语音条上，Muse 回复描述）、`camera.capture` 命令（服务端聊天里的 Muse 发，拍一张回传 base64 JPEG）、小智 MCP 视觉工具（小智开口调 `camera.capture`，板子拍照后直接 POST 给 vision 接口，拿描述回来）。注意：Muse 实时通话里的语音模型调不到 `camera.capture`（已用日志证实），想让 Muse 看照片请用语音拍照。照片只在 PSRAM 里停留约 1–3 秒，不存板上。v1.1.0 修复：VGA 截断帧（改 QVGA）、隔张重复（2 缓冲 + GRAB_LATEST）、红绿噪点（拷到私有缓冲再编码，编码器只读 DMA 碰不到的内存）。
+
+## 版本历史
+
+### v1.1.0（2026-11-26）
+
+新增：
+- 拍照（GC2145）：QVGA 软件 JPEG，三条路共用——Muse 语音拍照、`camera.capture` 命令、小智 MCP 视觉工具；数据手册 `docs/GC2145-CSP-Datasheet-V1.0-20141215.pdf`
+- 首页 36×36 天气图标（晴 / 多云 / 阴 / 雾 / 雨 / 雪 / 雷，7 种）
+- 顶栏状态图标（Wi-Fi、蓝牙、扬声器、麦克风、摄像头、存储卡），20×20，与时钟、城市同中心线对齐
+- 实拍照片画廊（`docs/images/`，5 张）
+
+修复：
+- 摄像头 VGA 截断帧 → 改 QVGA，5 次全成功
+- 摄像头隔张重复 → 2 缓冲 + GRAB_LATEST，队列永远拿最新帧
+- 摄像头红绿噪点 → 逐像素换字节 + 私有缓冲编码
+- 摄像头 deinit double-free 崩溃 → 初始化一次、永不 deinit
+
+### v1.0.0（2026-11-24）
+
+首个发布（源码，不含固件二进制）。
+- 板级移植：显示、触摸、双 codec 音频、BOOT 键
+- 火山豆包 TTS 朗读语音留言回复（seed-tts-2.0，音色 小何2.0）
+- 首页：天气、时间、日期、AQI，20 城市切换
+- Komari 服务器页：轮播 11 台服务器
+- 小智页：协议 v1 语音会话，默认官方服务
+- Muse 链路与内存优化：PSRAM 栈、LVGL 绘图缓冲减半、错峰拉取
+- 头像冻结修复（tile 位置硬编码 0）
+- 隐私：overlay 的火山 key 与 Komari 地址留空

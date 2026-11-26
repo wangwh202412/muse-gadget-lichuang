@@ -133,3 +133,38 @@ Muse account it is paired with.
   every second capture repeating the previous image (two buffers +
   GRAB_LATEST), magenta/green noise (copy to a private buffer and
   encode that, so the encoder only reads memory the DMA cannot reach).
+
+## Version history
+
+### v1.1.0 (2026-11-26)
+
+Added:
+- Photos (GC2145): QVGA software JPEG, shared by Muse photo notes, the
+  `camera.capture` command and the Xiaozhi MCP vision tool; datasheet in
+  `docs/GC2145-CSP-Datasheet-V1.0-20141215.pdf`
+- Home page 36x36 weather icon (clear / partly cloudy / cloudy / fog /
+  rain / snow / thunder, 7 types)
+- Top-bar status icons (Wi-Fi, Bluetooth, speaker, microphone, camera,
+  SD card), 20x20, aligned with the clock/city centre line
+- Live photo gallery (`docs/images/`, 5 photos)
+
+Fixed:
+- Truncated VGA camera frames -> QVGA, 5 of 5 captures succeed
+- Every second capture repeating the previous image -> two buffers +
+  GRAB_LATEST, the queue always holds the newest frame
+- Magenta/green camera noise -> per-pixel byte-swap + private-buffer encode
+- Camera deinit double-free crash -> initialise once, never deinit
+
+### v1.0.0 (2026-11-24)
+
+First release (source only, no firmware binaries).
+- Board port: display, touch, dual-codec audio, BOOT button
+- Volcano Doubao TTS spoken replies for voice notes (seed-tts-2.0,
+  speaker 小何2.0)
+- Home page: weather, time, date, AQI, 20-city picker
+- Komari server page: rotating 11 servers
+- Xiaozhi page: protocol v1 voice sessions, official service by default
+- Muse link and memory work: PSRAM stacks, halved LVGL draw buffer,
+  staggered first fetches
+- Avatar freeze fix (hardcoded tile position 0)
+- Privacy: overlay ships with an empty Volcano key and no Komari URL
